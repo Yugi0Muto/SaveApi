@@ -45,6 +45,22 @@ bash install.sh --non-interactive --step 05  # rejouer avec les réponses déjà
 Ne faites pas `curl … | sudo bash` : ces scripts s'exécutent en root, relisez le code avant de les lancer.
 En production, déployez toujours un **tag** testé (`git checkout v3.0.0`).
 
+## Guide d'installation et de passation (PDF)
+
+[`docs/Guide_installation_passation_wazuh-bundle.pdf`](docs/Guide_installation_passation_wazuh-bundle.pdf) contient :
+
+- l'architecture ;
+- l'installation pas à pas ;
+- l'exploitation : routines, emplacements, opérations courantes, dépannage ;
+- les règles et la rétention ;
+- une fiche de passation à signer.
+
+Pour le régénérer après une modification :
+
+```bash
+python3 docs/guide/build_pdf.py
+```
+
 ## Les étapes
 
 | Étape | Rôle | Questions principales |
