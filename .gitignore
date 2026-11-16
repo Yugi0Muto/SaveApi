@@ -1,9 +1,10 @@
-# --- SECRETS ET CONFIGURATION LOCALE : ne jamais publier ---
-bundle.conf
-*.env
+# --- SECRETS ET RÉPONSES LOCALES : ne jamais publier ---
+answers.env
 secrets.env
+*.env
 wazuh-passwords.txt
 wazuh-install-files.tar
+wazuh-grafana-kit.tar.gz
 *.pem
 *.key
 sasl_passwd*

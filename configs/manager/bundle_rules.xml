@@ -1,67 +1,152 @@
-<!-- Règles du wazuh-bundle — identifiants 100500 à 100599 -->
-<group name="local,bundle,">
+<!--
+  Règles de détection du wazuh-bundle (hors malware) — identifiants 100520 à 100599.
+  Documentation détaillée (but, déclencheur, test) : docs/REGLES.md
+  Déployé par l'étape 04 dans /var/ossec/etc/rules/bundle_10_rules.xml
 
-  <!-- 1) Hash SHA256 connu comme malveillant (liste etc/lists/malware-sha256).
-        DOIT rester AVANT les règles 100501/100502 (ordre d'évaluation). -->
-  <rule id="100500" level="14">
+  Rappels sur le fonctionnement :
+    * <if_sid>X</if_sid>     : la règle n'est évaluée que si la règle Wazuh X vient de correspondre
+                               (on « spécialise » une règle existante).
+    * <if_group>G</if_group> : idem, pour toute règle appartenant au groupe G.
+    * level                  : gravité 0 (ignoré) à 15. Repères du bundle :
+                               8 = à examiner, 10 = suspect, 12 = probable incident, 14+ = incident.
+    * <mitre>                : technique MITRE ATT&CK correspondante (affichée dans le dashboard).
+-->
+<group name="local,wazuh_bundle,">
+
+  <!-- ================= LINUX : modifications de fichiers sensibles (FIM) =================
+       Parents : 550 = somme de contrôle modifiée, 554 = fichier ajouté (module syscheck).
+       Ces fichiers sont surveillés en temps réel par le groupe os-linux. -->
+
+  <rule id="100551" level="10">
     <if_sid>550,554</if_sid>
-    <list field="syscheck.sha256_after" lookup="match_key">etc/lists/malware-sha256</list>
-    <description>Fichier au hash SHA256 connu comme malveillant : $(file)</description>
-    <group>syscheck,malware,attack,</group>
+    <field name="file" type="pcre2">(^|/)\.ssh/authorized_keys2?$</field>
+    <description>Linux : clé SSH autorisée ajoutée ou modifiée ($(file)) — accès persistant possible</description>
+    <mitre><id>T1098.004</id></mitre>
+    <group>persistence,ssh,</group>
   </rule>
 
-  <!-- 2) Déclencheurs du scan YARA (ajout / modification dans les répertoires surveillés) -->
-  <rule id="100501" level="3">
+  <rule id="100552" level="10">
+    <if_sid>550,554</if_sid>
+    <field name="file" type="pcre2">^/etc/sudoers(\.d/.+)?$</field>
+    <description>Linux : droits sudo modifiés ($(file))</description>
+    <mitre><id>T1548.003</id></mitre>
+    <group>privilege_escalation,</group>
+  </rule>
+
+  <rule id="100553" level="8">
+    <if_sid>550,554</if_sid>
+    <field name="file" type="pcre2">^/etc/(crontab$|cron\.(d|hourly|daily|weekly|monthly)/)|^/var/spool/cron/</field>
+    <description>Linux : tâche planifiée (cron) ajoutée ou modifiée ($(file))</description>
+    <mitre><id>T1053.003</id></mitre>
+    <group>persistence,</group>
+  </rule>
+
+  <rule id="100554" level="8">
     <if_sid>554</if_sid>
-    <field name="file" type="pcre2">__YARA_REGEX__</field>
-    <description>Fichier ajouté dans un répertoire analysé par YARA : $(file)</description>
-    <group>syscheck,yara_scan,</group>
+    <field name="file" type="pcre2">^/etc/systemd/system/.+\.(service|timer)$</field>
+    <description>Linux : nouveau service systemd ($(file))</description>
+    <mitre><id>T1543.002</id></mitre>
+    <group>persistence,</group>
   </rule>
 
-  <rule id="100502" level="3">
+  <rule id="100555" level="10">
     <if_sid>550</if_sid>
-    <field name="file" type="pcre2">__YARA_REGEX__</field>
-    <description>Fichier modifié dans un répertoire analysé par YARA : $(file)</description>
-    <group>syscheck,yara_scan,</group>
+    <field name="file" type="pcre2">^/etc/(passwd|shadow|group|gshadow)$</field>
+    <description>Linux : base des comptes modifiée ($(file)) — création de compte ou changement de groupe</description>
+    <mitre><id>T1136.001</id></mitre>
+    <group>account_changed,</group>
   </rule>
 
-  <!-- 3) Résultats YARA -->
-  <rule id="100510" level="0">
-    <decoded_as>yara_bundle</decoded_as>
-    <description>YARA : événement du scanner</description>
+  <rule id="100556" level="12">
+    <if_sid>550,554</if_sid>
+    <field name="file" type="pcre2">^/etc/ld\.so\.preload$</field>
+    <description>Linux : /etc/ld.so.preload modifié — technique typique de rootkit</description>
+    <mitre><id>T1574.006</id></mitre>
+    <group>rootkit,attack,</group>
   </rule>
 
-  <rule id="100511" level="12">
-    <if_sid>100510</if_sid>
-    <match>wazuh-yara: INFO - Scan result: </match>
-    <description>Malware détecté (YARA) : $(yara_scanned_file) — règle $(yara_rule)</description>
-    <group>yara,malware,attack,</group>
+  <!-- ================= LINUX : connexions SSH =================
+       Parent : 5715 = authentification SSH réussie (le décodeur sshd extrait l'utilisateur). -->
+
+  <rule id="100560" level="8">
+    <if_sid>5715</if_sid>
+    <user>^root$</user>
+    <description>Linux : connexion SSH directe du compte root depuis $(srcip)</description>
+    <mitre><id>T1078.003</id></mitre>
+    <group>authentication_success,</group>
   </rule>
 
-  <rule id="100512" level="8">
-    <if_sid>100510</if_sid>
-    <match>wazuh-yara: ERROR</match>
-    <description>YARA : erreur du scanner sur l'agent (voir active-responses.log)</description>
-    <group>yara,</group>
+  <rule id="100561" level="10">
+    <if_sid>100560</if_sid>
+    <time>19:00-07:00</time>
+    <description>Linux : connexion SSH de root HORS heures ouvrables depuis $(srcip)</description>
+    <mitre><id>T1078.003</id></mitre>
+    <group>authentication_success,suspicious,</group>
   </rule>
 
-  <!-- 4) Windows Defender (postes employés) : menace détectée / action prise.
-        À VALIDER lors de la recette avec le fichier de test EICAR. -->
+  <!-- ================= WINDOWS : journaux d'événements =================
+       <if_group>windows</if_group> : évaluée après toute règle Windows de Wazuh ; on précise ensuite
+       l'identifiant d'événement (EventID). Événements collectés par le groupe os-windows. -->
+
+  <rule id="100520" level="12">
+    <if_group>windows</if_group>
+    <field name="win.system.eventID">^1102$|^104$</field>
+    <field name="win.system.providerName">Eventlog</field>
+    <description>Windows : journal d'événements effacé — effacement de traces probable</description>
+    <mitre><id>T1070.001</id></mitre>
+    <group>attack,</group>
+  </rule>
+
+  <rule id="100521" level="12">
+    <if_group>windows</if_group>
+    <field name="win.system.eventID">^4728$|^4732$|^4756$</field>
+    <field name="win.eventdata.targetUserName" type="pcre2">(?i)^(administrators|administrateurs|domain admins|admins du domaine|enterprise admins|administrateurs de l.entreprise|schema admins)$</field>
+    <description>Windows : compte ajouté au groupe privilégié $(win.eventdata.targetUserName)</description>
+    <mitre><id>T1098</id></mitre>
+    <group>privilege_escalation,account_changed,</group>
+  </rule>
+
+  <rule id="100522" level="8">
+    <if_group>windows</if_group>
+    <field name="win.system.eventID">^7045$</field>
+    <description>Windows : nouveau service installé ($(win.eventdata.serviceName))</description>
+    <mitre><id>T1543.003</id></mitre>
+    <group>persistence,</group>
+  </rule>
+
+  <rule id="100523" level="8">
+    <if_group>windows</if_group>
+    <field name="win.system.eventID">^4698$</field>
+    <description>Windows : tâche planifiée créée ($(win.eventdata.taskName))</description>
+    <mitre><id>T1053.005</id></mitre>
+    <group>persistence,</group>
+  </rule>
+
+  <rule id="100524" level="10">
+    <if_group>windows</if_group>
+    <field name="win.system.eventID">^4719$</field>
+    <description>Windows : politique d'audit modifiée — la journalisation peut avoir été réduite</description>
+    <mitre><id>T1562.002</id></mitre>
+    <group>attack,</group>
+  </rule>
+
+  <!-- Windows Defender (antivirus intégré aux postes) -->
   <rule id="100540" level="12">
     <if_group>windows</if_group>
     <field name="win.system.providerName">Windows Defender</field>
-    <field name="win.system.eventID" type="pcre2">^(1116|1117)$</field>
-    <description>Windows Defender : menace détectée ou traitée</description>
+    <field name="win.system.eventID">^1116$|^1117$</field>
+    <description>Windows Defender : menace détectée ou traitée (détail dans win.eventdata)</description>
+    <mitre><id>T1204</id></mitre>
     <group>malware,defender,attack,</group>
   </rule>
 
-  <!-- 5) Connexion root hors heures ouvrables (heure du SERVEUR Wazuh) -->
-  <rule id="100560" level="10">
-    <if_sid>5501</if_sid>
-    <user>root</user>
-    <time>18:00-08:00</time>
-    <description>Session root ouverte hors heures ouvrables</description>
-    <group>authentication_success,suspicious,</group>
+  <rule id="100541" level="12">
+    <if_group>windows</if_group>
+    <field name="win.system.providerName">Windows Defender</field>
+    <field name="win.system.eventID">^5001$|^5010$|^5012$</field>
+    <description>Windows Defender : protection désactivée (temps réel, analyse antispyware ou antivirus)</description>
+    <mitre><id>T1562.001</id></mitre>
+    <group>defender,attack,</group>
   </rule>
 
 </group>

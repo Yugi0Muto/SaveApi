@@ -1,0 +1,5 @@
+# Auto-tests des règles du bundle par wazuh-logtest (étape 04 et recette 99).
+# Format : identifiants_acceptés|ligne de journal   (plusieurs identifiants séparés par des virgules)
+# Seules les règles déclenchées par une ligne de journal sont testables ainsi ; les règles FIM
+# (fichiers modifiés) et Windows se testent sur un agent (voir RECETTE.md).
+100560,100561|Nov 16 10:00:00 srv-test sshd[1234]: Accepted password for root from 10.0.0.5 port 50000 ssh2

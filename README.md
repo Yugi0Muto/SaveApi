@@ -1,102 +1,161 @@
-# wazuh-bundle v2 — déploiement Wazuh en production
+# wazuh-bundle v3 : déploiement Wazuh en production
 
-Bundle d'installation et de configuration d'un SIEM Wazuh (all-in-one) pour une entreprise
-organisée en trois segments : **SERVEURS**, **EMPLOYÉS**, **DMZ**.
+Assistant d'installation et de configuration d'un SIEM Wazuh tout-en-un (manager, indexer et dashboard sur un
+même serveur), pour une entreprise organisée en trois segments : **SERVEURS**, **EMPLOYÉS** et **DMZ**.
 
-> Statut : première version à **recetter**. Chaque étape est idempotente et s'arrête à la
-> première erreur. Voir `RECETTE.md` pour le plan de test.
+Principes de cette version :
 
-## Contenu
-| Étape | Script | Rôle |
-|---|---|---|
-| 00 | `00_preflight.sh` | Contrôles (OS, RAM, disque, ports, NTP, réseau). Ne modifie rien. |
-| 01 | `01_base_setup.sh` | Durcissement SSH sûr + installation Wazuh all-in-one |
-| 02 | `02_firewall.sh` | Pare-feu nftables par segment, avec annulation automatique (90 s) |
-| 03 | `03_manager_config.sh` | Enrôlement par mot de passe, liste blanche, groupes, règles |
-| 04 | `04_malware_detection.sh` | YARA + liste de hashes, mise à jour quotidienne |
-| 05 | `05_retention.sh` | Suppression des alertes > N jours |
-| 06 | `06_grafana.sh` | Grafana **local ou distant**, utilisateur indexer lecture seule, dashboard |
-| 07 | `07_email_alerts.sh` | Email via relais SMTP interne |
-| 08 | `08_sms_alerts.sh` | SMS (Africa's Talking), dédup + plafond |
-| 09 | `09_backup.sh` | Sauvegarde quotidienne de la configuration |
-| 99 | `99_verify.sh` | Recette automatique |
+- **Aucun fichier de configuration à éditer.** Chaque étape pose ses questions, propose une valeur par défaut,
+  valide la réponse et explique chaque choix.
+- **Chaque commande est visible.** Pour chaque commande, l'assistant affiche ce qu'elle fait, la commande
+  elle-même, sa sortie et son code retour. En cas d'échec, il affiche un diagnostic et une piste de solution,
+  puis **s'arrête**. Il ne continue jamais en silence.
+- **Chaque étape se vérifie et se rejoue.** Une modification de Wazuh est validée par Wazuh lui-même
+  (`wazuh-analysisd -t`…) avant tout redémarrage. Si elle est refusée, le retour en arrière est automatique.
+- **Aucun pare-feu n'est configuré.** L'entreprise administre le sien. Le bundle fournit le tableau des flux
+  réseau à autoriser.
 
-Agents : `bash/agents/install_agent_linux.sh`, `bash/agents/install_agent_windows.ps1`.
+## Démarrage
 
-## Démarrage rapide (serveur Debian/Ubuntu neuf)
+Sur un serveur Debian 12/13 ou Ubuntu 22.04/24.04 neuf, avec une **IP fixe** :
+
 ```bash
 sudo -i
 apt-get update && apt-get install -y git
+```
+
+```bash
 git clone https://github.com/VOTRE_COMPTE/wazuh-bundle.git /opt/wazuh-bundle
-cd /opt/wazuh-bundle
-git checkout v2.0.0            # en production : toujours un tag, jamais la branche principale
-cp bundle.conf.example bundle.conf && chmod 600 bundle.conf
-nano bundle.conf               # remplir TOUTES les valeurs A_COMPLETER
-bash install.sh --step 00      # préflight ; corriger jusqu'à "Préflight OK"
-bash install.sh                # menu, ou : bash install.sh --all
 ```
-**Ne pas faire** `curl ... | sudo bash` : ces scripts s'exécutent en root, relire le code avant de les lancer.
 
-## Démarrage (archive ZIP)
 ```bash
-sudo -i
-cd wazuh-bundle-v2
-cp bundle.conf.example bundle.conf && chmod 600 bundle.conf
-nano bundle.conf            # remplir TOUTES les valeurs A_COMPLETER
-bash install.sh --step 00   # corriger jusqu'à "Préflight OK"
-bash install.sh             # menu, ou : bash install.sh --all
+cd /opt/wazuh-bundle && bash install.sh
 ```
 
-## Grafana sur une autre machine
-Dans `bundle.conf`, deux variables pilotent l'emplacement de Grafana :
+Le menu propose chaque étape, `a` pour tout enchaîner, `e` pour l'explication d'une étape, `f` pour les flux
+réseau. Autres modes :
 
-```
-GRAFANA_ENABLE="true"
-GRAFANA_MODE="remote"                 # local (défaut) = sur ce serveur ; remote = autre machine
-GRAFANA_REMOTE_IPS="10.10.10.60/32"   # IP/CIDR de la machine Grafana (obligatoire en remote)
+```bash
+bash install.sh --step 07                    # une seule étape
+bash install.sh --explain 06                 # ce que fait l'étape, sans rien exécuter
+bash install.sh --flows                      # flux réseau à transmettre à l'équipe pare-feu
+bash install.sh --non-interactive --step 05  # rejouer avec les réponses déjà données
 ```
 
-| | `local` | `remote` |
+Ne faites pas `curl … | sudo bash` : ces scripts s'exécutent en root, relisez le code avant de les lancer.
+En production, déployez toujours un **tag** testé (`git checkout v3.0.0`).
+
+## Les étapes
+
+| Étape | Rôle | Questions principales |
 |---|---|---|
-| Grafana installé par le bundle | oui (sur le serveur Wazuh) | non (déjà présent sur l'autre machine) |
-| Pare-feu (étape 02) | 3000 ouvert aux `ADMIN_CIDRS` | 3000 fermé ; **9200 ouvert uniquement à `GRAFANA_REMOTE_IPS`** |
-| Étape 06 | installe Grafana, crée `grafana_ro`, provisionne datasource + dashboard | crée `grafana_ro` et **génère un kit** `/root/.wazuh-bundle/wazuh-grafana-kit.tar.gz` |
+| 00 Préflight | Contrôles (OS, ressources, ports, Internet, NTP). Ne modifie rien. | IP du serveur, postes d'administration |
+| 01 SSH | Durcissement **optionnel**, mesure par mesure (7 mesures expliquées, risques, retour arrière) | oui/non par mesure |
+| 02 Wazuh | Installation officielle (`wazuh-install.sh`), branche 4.14 | adresse d'écoute de l'indexer |
+| 03 Manager | Enrôlement par mot de passe, liste blanche, réponse active, groupes d'agents | IP jamais bloquées, durée de blocage |
+| 04 Règles | Déploiement + **auto-test** des règles du bundle (`docs/REGLES.md`) | |
+| 05 Rétention | Politique ISM de l'indexer + purge des fichiers locaux | durées de conservation |
+| 06 YARA | YARA **4.5.8** (vérifié), liste de hashes abuse.ch, mises à jour, test EICAR (`docs/YARA.md`) | répertoires, sources |
+| 07 E-mail | **Gmail**, **SMTP entreprise** ou **relais**, tests de bout en bout | mode, serveur, destinataires, niveau |
+| 08 SMS | Africa's Talking, dédoublonnage + plafond | numéros, niveau |
+| 09 Grafana | Local ou distant, utilisateur lecture seule | emplacement |
+| 10 Sauvegarde | Archive quotidienne de la configuration | dossier, durée |
+| 99 Recette | Vérification complète, lecture seule | |
 
-Mode `remote`, après l'étape 06 :
-```bash
-scp /root/.wazuh-bundle/wazuh-grafana-kit.tar.gz utilisateur@machine-grafana:/tmp/
-# puis, en root sur la machine Grafana (Grafana déjà installé) :
-cd /tmp && tar -xzf wazuh-grafana-kit.tar.gz && bash wazuh-grafana-kit/install.sh
-```
-Le kit contient un mot de passe (lecture seule sur `wazuh-alerts-*`) : le transférer par un canal sûr et le supprimer
-ensuite. Le script installe le plugin OpenSearch, déclare le datasource (certificat vérifié) et les dashboards, puis
-teste la connexion à l'indexer. Il ne marque pas le datasource comme « par défaut » pour ne pas perturber un Grafana existant.
+Les agents s'installent avec `agents/install_agent_linux.sh` (questions interactives) et
+`agents/install_agent_windows.ps1`.
 
-Points d'attention : l'indexer doit écouter sur `MANAGER_IP` (ou `0.0.0.0`) — vérifié par l'étape 06 ; l'adresse
-`MANAGER_IP` doit figurer dans le certificat de l'indexer ; Grafana est un composant séparé à sauvegarder et durcir de son côté.
+## Où sont les réglages ?
 
-## Configuration centralisée par groupes
-Un agent appartient à plusieurs groupes ; la configuration est poussée par le manager.
+| Fichier | Contenu | Droits |
+|---|---|---|
+| `/etc/wazuh-bundle/answers.env` | Réponses aux questions. Généré par l'assistant, **ne pas éditer** : relancer l'étape. Sert aussi de valeur par défaut à la relance et aux tâches planifiées. | root, 600 |
+| `/root/.wazuh-bundle/secrets.env` | Mots de passe et clés API (indexer, enrôlement, SMTP, abuse.ch, SMS, Grafana) | root, 600 |
+| `/root/.wazuh-bundle/wazuh-passwords.txt` | Mots de passe générés par Wazuh | root, 600 |
+| `/etc/wazuh-bundle/RETENTION.txt` | Politique de rétention appliquée | lisible |
+| `/var/log/wazuh-bundle/` | Journal complet de chaque exécution de `install.sh` et des tâches quotidiennes | root |
+
+Tout ce que le bundle ajoute à `ossec.conf` est encadré par `<!-- wazuh-bundle:BEGIN nom -->` et
+`<!-- wazuh-bundle:END nom -->`. Une relance remplace ce bloc sans jamais le dupliquer.
+
+## Pare-feu : flux réseau à autoriser
+
+Le bundle **ne configure aucun pare-feu**. Transmettez ce tableau à l'équipe réseau.
+`bash install.sh --flows` l'affiche avec vos adresses.
+
+| Source | Destination | Port | Rôle |
+|---|---|---|---|
+| Agents (3 segments) | serveur Wazuh | TCP 1514 | événements des agents |
+| Agents (3 segments) | serveur Wazuh | TCP 1515 | enrôlement des agents |
+| Postes d'administration | serveur Wazuh | TCP 443 | Wazuh Dashboard |
+| Postes d'administration | serveur Wazuh | TCP 22 | SSH |
+| Postes d'administration | serveur Wazuh | TCP 3000 | Grafana local (étape 09) |
+| Machine Grafana distante | serveur Wazuh | TCP 9200 | indexer, **uniquement** cette machine |
+| Serveur Wazuh | Internet | TCP 443 | paquets, GitHub (YARA), abuse.ch, API SMS |
+| Serveur Wazuh | serveur SMTP | TCP 587 / 465 / 25 | alertes e-mail |
+
+**À ne pas ouvrir** depuis les segments employés et DMZ : 9200 (indexer) et 55000 (API Wazuh).
+
+La **réponse active** de l'étape 03 n'est pas un pare-feu d'entreprise. Elle bloque temporairement une IP
+attaquante dans le pare-feu **local de l'agent attaqué** (iptables/nftables), puis la débloque. Elle reste
+optionnelle et ne bloque jamais les adresses de la liste blanche.
+
+## Groupes d'agents (configuration centralisée)
+
+Un agent appartient à plusieurs groupes, et le manager lui envoie la configuration de chacun.
 `seg-dmz|servers|employees` + `os-linux|windows` + `role-web|db|admin` + `feat-yara` + `opt-whodata`.
-Modifier `configs/groups/<groupe>/agent.conf` puis relancer l'étape 03.
+Pour modifier la surveillance, éditez `configs/groups/<groupe>/agent.conf` puis relancez l'étape 03.
+Le groupe `feat-yara` est généré par l'étape 06.
 
-## Format de bundle.conf
-Chaque commentaire est sur sa propre ligne, **au-dessus** de la variable concernée (jamais de `#` en fin de ligne).
+## Mise à jour depuis la v2
 
-## Fichiers sensibles (jamais dans Git)
-`bundle.conf` (contient des adresses internes) et `/root/.wazuh-bundle/` (mots de passe, kit Grafana distant).
+La v2 utilisait `bundle.conf` et un pare-feu nftables. Elle ajoutait aussi à `ossec.conf` des blocs sans
+marqueurs, ce qui pouvait **dupliquer la commande `yara_linux`** à la relance et rendre la configuration
+invalide. La v3 nettoie ces reliquats automatiquement :
 
-## Tests (sans Wazuh, sans root)
+- l'étape 03 retire les anciens blocs de `ossec.conf` (commande `migrate-v2`) ;
+- l'étape 04 retire les anciens fichiers `bundle_rules.xml` et `bundle_decoders.xml` ;
+- l'étape 05 remplace l'ancienne politique `wazuh-retention`.
+
+L'ancien pare-feu n'est **pas** supprimé automatiquement. Si vous voulez le retirer :
+
+```bash
+nft delete table inet wazuh_bundle
+```
+
+```bash
+systemctl disable nftables
+```
+
+Pensez aussi à nettoyer `/etc/nftables.conf`.
+
+Autres corrections de la v3 sur le manager :
+
+- les scripts utilisent l'adresse réelle de l'indexer (`127.0.0.1` par défaut), au lieu d'appeler
+  `https://IP:9200` alors qu'il n'écoute que sur 127.0.0.1 ;
+- la règle de hash lit le bon champ (`sha256`) ;
+- les erreurs de création de groupes ne sont plus masquées ;
+- un changement de durée de rétention est réellement appliqué (mise à jour de la politique ISM existante) ;
+- les fichiers d'alertes locaux, jamais purgés auparavant, sont désormais purgés.
+
+## Tests (sans Wazuh)
+
 ```bash
 sudo apt-get install -y yara jq shellcheck libxml2-utils
+```
+
+```bash
 bash tests/run_tests.sh
 ```
-Vérifie : syntaxe et shellcheck, XML/JSON, règles YARA (EICAR, webshell), script Active Response,
-mise à jour des hashes/règles (simulation), daemon SMS. Exécutés aussi par GitHub Actions à chaque push.
-Les tests ne remplacent pas la recette sur un vrai serveur (`RECETTE.md`).
+
+La suite vérifie : syntaxe et shellcheck, absence d'erreurs masquées, XML/JSON, unicité et documentation des
+règles, `ossec_conf.py` (ajout, remplacement, idempotence, migration v2, refus d'un XML invalide), exécution
+explicite (`run`), questions et validations, paramètres Postfix des 3 modes, règles YARA, script de réponse
+active, mises à jour (simulation), purge, Grafana et daemon SMS. GitHub Actions la lance à chaque push.
+Ces tests ne remplacent pas la recette sur un vrai serveur (`RECETTE.md`).
 
 ## Publication : bonnes pratiques
-- `bundle.conf` et les secrets sont exclus par `.gitignore` : ne jamais les forcer (`git add -f`).
-- Dépôt **privé** recommandé si la configuration décrit votre architecture réelle.
-- Versionner par tags (`v2.0.1`...) et déployer uniquement des tags testés.
-- Choisir une licence (fichier `LICENSE`) avant de rendre le dépôt public.
+
+- `answers.env`, `secrets.env` et les sauvegardes ne doivent jamais être versionnés (`.gitignore`).
+- Préférez un dépôt **privé** si la documentation décrit votre architecture réelle.
+- Versionnez par tags et ne déployez que des tags testés.

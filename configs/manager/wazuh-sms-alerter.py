@@ -8,7 +8,15 @@ alerte de niveau >= SMS_ALERT_LEVEL, avec :
   - gestion de la rotation du fichier d'alertes
 Configuration par variables d'environnement (EnvironmentFile du service systemd).
 """
-import json, os, sys, time, urllib.parse, urllib.request
+import json, os, shlex, sys, time, urllib.parse, urllib.request
+
+# --test : lit le fichier de paramètres indiqué par SMS_ENV (sinon l'environnement systemd)
+if os.environ.get("SMS_ENV"):
+    with open(os.environ["SMS_ENV"], encoding="utf-8") as fh:
+        for ln in fh:
+            if "=" in ln and not ln.lstrip().startswith("#"):
+                k, v = ln.rstrip("\n").split("=", 1)
+                os.environ.setdefault(k, " ".join(shlex.split(v)))
 
 ALERTS = "/var/ossec/logs/alerts/alerts.json"
 USER   = os.environ["AT_USERNAME"]
@@ -30,9 +38,12 @@ def send(text):
     try:
         with urllib.request.urlopen(req, timeout=20) as r:
             body = json.loads(r.read().decode())
-        for rcpt in body.get("SMSMessageData", {}).get("Recipients", []):
+        rcpts = body.get("SMSMessageData", {}).get("Recipients", [])
+        for rcpt in rcpts:
             log(f"SMS -> {rcpt.get('number')} status={rcpt.get('status')} cost={rcpt.get('cost')}")
-        return True
+        if not rcpts:
+            log(f"[ERREUR] réponse de l'API sans destinataire : {body}")
+        return any(r.get("status") == "Success" for r in rcpts)
     except Exception as e:
         log(f"[ERREUR] envoi SMS : {e}")
         return False
@@ -80,5 +91,8 @@ def follow():
             continue
 
 if __name__ == "__main__":
+    if "--test" in sys.argv:
+        ok = send(f"[WAZUH] SMS de test du wazuh-bundle ({time.strftime('%Y-%m-%d %H:%M')})")
+        sys.exit(0 if ok else 1)
     log(f"wazuh-sms-alerter démarré (niveau >= {LEVEL}, max {MAXH}/h, dédup {DEDUP}s, {URL})")
     follow()

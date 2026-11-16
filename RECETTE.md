@@ -1,29 +1,34 @@
 # Plan de recette (à dérouler après installation)
 
-Renseigner OK / KO / commentaire pour chaque ligne.
+Pour chaque ligne, notez OK, KO ou un commentaire. La commande `bash install.sh --step 99` vérifie
+automatiquement l'essentiel côté serveur. Ce plan couvre en plus ce qui ne se teste que depuis le réseau ou les agents.
 
 | # | Test | Commande / action | Résultat attendu |
 |---|---|---|---|
-| 1 | Préflight | `./install.sh --step 00` | « Préflight OK » |
-| 2 | Recette serveur | `./install.sh --step 99` | 0 échec |
-| 3 | Pare-feu : admin | Ouvrir `https://IP` depuis un poste ADMIN | Page de connexion |
-| 4 | Pare-feu : non-admin | Même URL depuis un poste employé | Refusé / timeout |
-| 5 | Agent Linux DMZ | `install_agent_linux.sh ... --segment dmz --role web --yara` | « Agent connecté » |
-| 6 | Agent Linux serveurs | idem `--segment servers --role db` | Connecté |
-| 7 | Agent Windows employé | `install_agent_windows.ps1 ... -Segment employees` | Connecté |
-| 8 | Groupes | `/var/ossec/bin/agent_groups -l` ; `agent_groups -s -i <ID>` | Groupes attendus par agent |
-| 9 | Config poussée | Sur l'agent : `ls /var/ossec/etc/shared/` | `yara_rules.yar` présent (agent feat-yara) |
-| 10 | FIM | Modifier `/etc/hosts` sur un agent | Alerte 550 (ou 100502 selon chemin) |
-| 11 | YARA | `printf 'X5O!P%%@AP[4\\PZX54(P^)7CC)7}$EICAR-STANDARD-ANTIVIRUS-TEST-FILE!$H+H*' > /var/www/eicar.txt` | Alerte 100511 niveau 12 |
-| 12 | Hash malveillant | Ajouter le SHA256 d'un fichier test dans `etc/lists/malware-sha256`, redémarrer, créer le fichier | Alerte 100500 niveau 14 |
-| 13 | Defender | Fichier EICAR sur un poste Windows | Alerte 100540 (sinon ajuster la règle) |
-| 14 | Brute force + AR | 6 échecs SSH depuis un poste NON whitelisté | Alerte 5763, IP bloquée 10 min (`iptables -L`) |
-| 15 | Liste blanche | Même test depuis une IP whitelistée | AUCUN blocage |
-| 16 | Email | Alerte niveau >= EMAIL_ALERT_LEVEL | Email reçu |
-| 17 | SMS | Alerte niveau >= SMS_ALERT_LEVEL | SMS reçu (hors sandbox) ; 2e identique ignorée |
-| 18 | Grafana (`GRAFANA_MODE=local`) | `http://IP:3000` depuis un poste ADMIN | Dashboard « Wazuh — Vue SOC » avec données |
-| 18b | Grafana (`GRAFANA_MODE=remote`) | Installer le kit sur la machine Grafana, ouvrir `http://<machine-grafana>:3000` | Dashboard « Wazuh — Vue SOC » avec données ; `install.sh` du kit termine par « Indexer joignable » |
-| 18c | Grafana remote : pare-feu | Depuis une machine NON listée dans `GRAFANA_REMOTE_IPS` : `curl -k https://IP:9200` | Refusé / timeout (3000 aussi fermé sur le serveur Wazuh) |
-| 19 | Rétention | Dashboard > Index Management | Politique `wazuh-retention` |
-| 20 | Sauvegarde | `ls -l /var/backups/wazuh` | Archive du jour |
-| 21 | Redémarrage | `reboot` | Tous les services reviennent (`./install.sh --step 99`) |
+| 1 | Préflight | `bash install.sh --step 00` | « Préflight OK » |
+| 2 | Recette serveur | `bash install.sh --step 99` | 0 échec |
+| 3 | SSH (si étape 01 appliquée) | Nouvelle session SSH avec le compte admin + `sudo -v` | Connexion et sudo OK |
+| 4 | Flux admin | Ouvrir `https://IP` depuis un poste ADMIN | Page de connexion |
+| 5 | Flux non-admin | Même URL depuis un poste employé (selon le pare-feu de l'entreprise) | Refusé / timeout |
+| 6 | Agent Linux DMZ | `bash agents/install_agent_linux.sh` (segment dmz, rôle web, YARA oui) | « Agent … connecté » |
+| 7 | Agent Linux serveurs | idem, segment servers, rôle db | Connecté |
+| 8 | Agent Windows employé | `install_agent_windows.ps1 -ManagerIP … -Segment employees …` | Connecté |
+| 9 | Groupes | `/var/ossec/bin/agent_groups -s -i <ID>` | Groupes attendus |
+| 10 | FIM | Sur un agent Linux : `echo test >> /etc/sudoers.d/test-recette` puis le supprimer | Alerte 100552 |
+| 11 | YARA | Sur l'agent DMZ : `printf '%s' 'X5O!P%@AP[4\PZX54(P^)7CC)7}$EICAR-STANDARD-ANTIVIRUS-TEST-FILE!$H+H*' > /tmp/eicar.txt` | Alerte 100511 niveau 12 |
+| 12 | Hash malveillant | Ajouter `<sha256 d'un fichier test>:` dans `/var/ossec/etc/lists/malware-sha256`, `systemctl restart wazuh-manager`, copier le fichier dans un répertoire surveillé | Alerte 100500 niveau 14 |
+| 13 | Clé SSH | Sur un agent : ajouter une ligne dans `/root/.ssh/authorized_keys` | Alerte 100551 |
+| 14 | Connexion root | `ssh root@agent` (si autorisé) | Alerte 100560 (100561 hors heures) |
+| 15 | Defender | Fichier EICAR sur un poste Windows | Alerte 100540 |
+| 16 | Journal effacé | Poste Windows de test, en admin : `wevtutil cl Application` | Alerte 100520 |
+| 17 | Force brute + réponse active | 6 échecs SSH vers un agent depuis une IP NON whitelistée | Alerte 5763, IP bloquée 10 min sur l'agent (`iptables -L -n` ou `nft list ruleset`) |
+| 18 | Liste blanche | Même test depuis une IP whitelistée | AUCUN blocage |
+| 19 | E-mail | Déclencher le test 11 (niveau 12 ≥ seuil e-mail) | E-mail reçu ; `journalctl -t postfix/smtp` : `status=sent` |
+| 20 | SMS | Alerte ≥ niveau SMS | SMS reçu (hors sandbox) ; une 2e alerte identique est ignorée |
+| 21 | Grafana local | `http://IP:3000` depuis un poste ADMIN | Dashboard « Wazuh — Vue SOC » avec données |
+| 21b | Grafana distant | Kit installé sur la machine Grafana | « Indexer joignable » puis dashboard avec données |
+| 22 | Rétention | Dashboard > Index Management > Policies ; `cat /etc/wazuh-bundle/RETENTION.txt` | Politiques `wazuh-bundle-*` aux durées choisies |
+| 23 | Purge locale | `/usr/local/sbin/wazuh-bundle-purge-logs --dry-run` | Liste cohérente, rien de supprimé |
+| 24 | Sauvegarde | `ls -l /var/backups/wazuh` | Archive du jour |
+| 25 | Redémarrage | `reboot` puis `bash install.sh --step 99` | 0 échec |
+| 26 | Relance | Relancer `bash install.sh --step 03` puis `--step 06` | Aucun doublon dans `ossec.conf` (blocs « inchangé ») |
