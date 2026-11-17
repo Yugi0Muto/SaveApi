@@ -151,6 +151,14 @@ t "aucun index (archivage non activé) : pas d'erreur, rien rattaché" bash -c '
 t "« no documents to get » sur change_policy : pas une erreur" bash -c 'o="$(ISM nodoc)"; grep -q "ce n.est pas une erreur" <<< "$o" && grep -q FIN <<< "$o"'
 t "autre erreur sur change_policy : arrêt" bash -c 'o="$(ISM autre)"; ! grep -q FIN <<< "$o" && grep -q "impossible" <<< "$o"'
 
+echo "== 4d. Sortie de l'installateur Wazuh rendue lisible"
+WI="$(BUNDLE_COLOR=0 python3 tools/wazuh_install_filter.py < tests/fixtures/wazuh-install-echec.txt)"; export WI
+t "phases traduites et numérotées" bash -c 'grep -q "▶ Phase 1 : Prérequis" <<< "$WI"'
+t "avertissement « système hors liste » expliqué" bash -c 'grep -q "avertissement sans conséquence" <<< "$WI"'
+t "message du shell signalé et diagnostiqué (reste d'installation)" bash -c 'grep -q "? wazuh-install.sh: ligne 4712" <<< "$WI" && grep -q "reste d.une installation précédente" <<< "$WI"'
+t "erreur en évidence + annulation signalée + récapitulatif" bash -c 'grep -q "✘ wazuh-manager could not be started" <<< "$WI" && grep -q "↺ L.installateur a annulé" <<< "$WI" && grep -q "1 erreur(s), 1 avertissement(s)" <<< "$WI"'
+t "aucune ligne perdue (chaque message d'origine est affiché)" bash -c 'n=0; while IFS= read -r l; do m="${l#??/??/???? ??:??:?? }"; m="${m#*: }"; [[ "$m" == ---* ]] && continue; grep -qF -- "$m" <<< "$WI" || { echo "absent : $m"; n=1; }; done < tests/fixtures/wazuh-install-echec.txt; exit $n'
+
 echo "== 5. E-mail : paramètres Postfix des 3 modes"
 E() { bash -c 'source lib/email.sh; postfix_settings '"$*"; }
 t "gmail : 587, TLS vérifié, authentification" bash -c 'o="$(bash -c "source lib/email.sh; postfix_settings gmail smtp.gmail.com 587 verify oui")"; grep -qx "relayhost = \[smtp.gmail.com\]:587" <<< "$o" && grep -qx "smtp_tls_security_level = secure" <<< "$o" && grep -qx "smtp_sasl_auth_enable = yes" <<< "$o" && grep -qx "inet_interfaces = loopback-only" <<< "$o"'

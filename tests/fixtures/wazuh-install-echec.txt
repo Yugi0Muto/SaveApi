@@ -1,0 +1,14 @@
+17/11/2026 11:13:20 INFO: Starting Wazuh installation assistant. Wazuh version: 4.14.10
+17/11/2026 11:13:20 WARNING: The current system does not match with the list of recommended systems. The installation may not work properly.
+17/11/2026 11:13:28 INFO: --- Dependencies ----
+17/11/2026 11:13:30 INFO: Installing gawk.
+17/11/2026 11:13:34 INFO: Verifying that your system meets the recommended minimum hardware requirements.
+17/11/2026 11:13:44 INFO: Wazuh indexer cluster security configuration initialized.
+17/11/2026 11:13:57 INFO: Updating the internal users.
+17/11/2026 11:14:14 INFO: The filebeat.yml file has been updated to use the Filebeat Keystore username and password.
+wazuh-install.sh: ligne 4712: /var/ossec/bin/wazuh-keystore: Aucun fichier ou dossier de ce nom
+17/11/2026 11:14:15 ERROR: wazuh-manager could not be started.
+17/11/2026 11:14:15 INFO: --- Removing existing Wazuh installation ---
+17/11/2026 11:14:15 INFO: --- Dependencies ----
+17/11/2026 11:14:15 INFO: Removing gawk.
+17/11/2026 11:14:21 INFO: Installation cleaned. Check the /var/log/wazuh-install.log file to learn more about the issue.
