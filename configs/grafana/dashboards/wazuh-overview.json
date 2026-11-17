@@ -1,0 +1,2134 @@
+{
+  "uid": "wazuh-overview",
+  "title": "Wazuh — Poste de commande",
+  "description": "Vue d'ensemble du SIEM : faut-il agir, tendance, machines et règles en cause, alertes à traiter.",
+  "tags": [
+    "wazuh",
+    "soc",
+    "vue d'ensemble"
+  ],
+  "timezone": "browser",
+  "schemaVersion": 39,
+  "version": 1,
+  "editable": true,
+  "graphTooltip": 1,
+  "refresh": "1m",
+  "time": {
+    "from": "now-24h",
+    "to": "now"
+  },
+  "timepicker": {
+    "refresh_intervals": [
+      "30s",
+      "1m",
+      "5m",
+      "15m"
+    ]
+  },
+  "templating": {
+    "list": [
+      {
+        "name": "agent",
+        "label": "Machine",
+        "type": "query",
+        "datasource": {
+          "type": "grafana-opensearch-datasource",
+          "uid": "wazuh-opensearch"
+        },
+        "query": "{\"find\": \"terms\", \"field\": \"agent.name\", \"size\": 1000}",
+        "refresh": 2,
+        "includeAll": true,
+        "multi": true,
+        "allValue": "*",
+        "sort": 1,
+        "current": {
+          "selected": true,
+          "text": [
+            "All"
+          ],
+          "value": [
+            "$__all"
+          ]
+        }
+      }
+    ]
+  },
+  "annotations": {
+    "list": [
+      {
+        "builtIn": 1,
+        "datasource": {
+          "type": "grafana",
+          "uid": "-- Grafana --"
+        },
+        "enable": true,
+        "hide": true,
+        "iconColor": "rgba(0, 211, 255, 1)",
+        "name": "Annotations & Alerts",
+        "type": "dashboard"
+      }
+    ]
+  },
+  "links": [
+    {
+      "title": "Tableau détaillé (Vue SOC)",
+      "type": "link",
+      "url": "/d/wazuh-soc",
+      "icon": "dashboard"
+    }
+  ],
+  "panels": [
+    {
+      "id": 1,
+      "type": "text",
+      "title": "",
+      "gridPos": {
+        "x": 0,
+        "y": 0,
+        "w": 24,
+        "h": 2
+      },
+      "transparent": true,
+      "options": {
+        "mode": "html",
+        "content": "<div style=\"display:flex;gap:18px;align-items:center;font-size:13px;flex-wrap:wrap\"><b style=\"font-size:15px\">Lecture&nbsp;:</b><span><span style=\"color:#E02F44\">■</span> ≥ 12 incident probable — à traiter tout de suite</span><span><span style=\"color:#FF780A\">■</span> 10–11 suspect — à examiner dans la journée</span><span><span style=\"color:#FADE2A\">■</span> 7–9 à surveiller</span><span><span style=\"color:#56A64B\">■</span> &lt; 7 information</span><span style=\"opacity:.7\">Période et machine : en haut à droite / en haut à gauche.</span></div>"
+      }
+    },
+    {
+      "id": 2,
+      "type": "stat",
+      "title": "Incidents probables",
+      "description": "Alertes de niveau 12 et plus sur la période : malware, journal effacé, protection désactivée… Toute valeur différente de 0 doit être traitée (tableau « À traiter » plus bas).",
+      "datasource": {
+        "type": "grafana-opensearch-datasource",
+        "uid": "wazuh-opensearch"
+      },
+      "gridPos": {
+        "x": 0,
+        "y": 2,
+        "w": 4,
+        "h": 5
+      },
+      "targets": [
+        {
+          "refId": "A",
+          "datasource": {
+            "type": "grafana-opensearch-datasource",
+            "uid": "wazuh-opensearch"
+          },
+          "queryType": "lucene",
+          "query": "(rule.level:>=12) AND agent.name:${agent:lucene}",
+          "timeField": "@timestamp",
+          "metrics": [
+            {
+              "id": "1",
+              "type": "count"
+            }
+          ],
+          "bucketAggs": [
+            {
+              "id": "2",
+              "type": "date_histogram",
+              "field": "@timestamp",
+              "settings": {
+                "interval": "auto",
+                "min_doc_count": "0"
+              }
+            }
+          ]
+        }
+      ],
+      "options": {
+        "reduceOptions": {
+          "calcs": [
+            "sum"
+          ],
+          "fields": "",
+          "values": false
+        },
+        "colorMode": "background",
+        "graphMode": "area",
+        "textMode": "value",
+        "justifyMode": "center",
+        "orientation": "auto",
+        "wideLayout": true
+      },
+      "fieldConfig": {
+        "defaults": {
+          "unit": "none",
+          "noValue": "0",
+          "decimals": 0,
+          "color": {
+            "mode": "thresholds"
+          },
+          "thresholds": {
+            "mode": "absolute",
+            "steps": [
+              {
+                "color": "#56A64B",
+                "value": null
+              },
+              {
+                "color": "#E02F44",
+                "value": 1
+              }
+            ]
+          }
+        },
+        "overrides": []
+      }
+    },
+    {
+      "id": 3,
+      "type": "stat",
+      "title": "Suspects",
+      "description": "Alertes de niveau 10 et 11 : changement sensible (sudoers, clé SSH, comptes), connexion root hors heures…",
+      "datasource": {
+        "type": "grafana-opensearch-datasource",
+        "uid": "wazuh-opensearch"
+      },
+      "gridPos": {
+        "x": 4,
+        "y": 2,
+        "w": 4,
+        "h": 5
+      },
+      "targets": [
+        {
+          "refId": "A",
+          "datasource": {
+            "type": "grafana-opensearch-datasource",
+            "uid": "wazuh-opensearch"
+          },
+          "queryType": "lucene",
+          "query": "(rule.level:[10 TO 11]) AND agent.name:${agent:lucene}",
+          "timeField": "@timestamp",
+          "metrics": [
+            {
+              "id": "1",
+              "type": "count"
+            }
+          ],
+          "bucketAggs": [
+            {
+              "id": "2",
+              "type": "date_histogram",
+              "field": "@timestamp",
+              "settings": {
+                "interval": "auto",
+                "min_doc_count": "0"
+              }
+            }
+          ]
+        }
+      ],
+      "options": {
+        "reduceOptions": {
+          "calcs": [
+            "sum"
+          ],
+          "fields": "",
+          "values": false
+        },
+        "colorMode": "background",
+        "graphMode": "area",
+        "textMode": "value",
+        "justifyMode": "center",
+        "orientation": "auto",
+        "wideLayout": true
+      },
+      "fieldConfig": {
+        "defaults": {
+          "unit": "none",
+          "noValue": "0",
+          "decimals": 0,
+          "color": {
+            "mode": "thresholds"
+          },
+          "thresholds": {
+            "mode": "absolute",
+            "steps": [
+              {
+                "color": "#56A64B",
+                "value": null
+              },
+              {
+                "color": "#FF780A",
+                "value": 1
+              }
+            ]
+          }
+        },
+        "overrides": []
+      }
+    },
+    {
+      "id": 4,
+      "type": "stat",
+      "title": "Malware",
+      "description": "Détections YARA (100511), empreinte connue (100500), Windows Defender (100540).",
+      "datasource": {
+        "type": "grafana-opensearch-datasource",
+        "uid": "wazuh-opensearch"
+      },
+      "gridPos": {
+        "x": 8,
+        "y": 2,
+        "w": 4,
+        "h": 5
+      },
+      "targets": [
+        {
+          "refId": "A",
+          "datasource": {
+            "type": "grafana-opensearch-datasource",
+            "uid": "wazuh-opensearch"
+          },
+          "queryType": "lucene",
+          "query": "(rule.groups:malware OR rule.id:(100500 OR 100511 OR 100540)) AND agent.name:${agent:lucene}",
+          "timeField": "@timestamp",
+          "metrics": [
+            {
+              "id": "1",
+              "type": "count"
+            }
+          ],
+          "bucketAggs": [
+            {
+              "id": "2",
+              "type": "date_histogram",
+              "field": "@timestamp",
+              "settings": {
+                "interval": "auto",
+                "min_doc_count": "0"
+              }
+            }
+          ]
+        }
+      ],
+      "options": {
+        "reduceOptions": {
+          "calcs": [
+            "sum"
+          ],
+          "fields": "",
+          "values": false
+        },
+        "colorMode": "background",
+        "graphMode": "area",
+        "textMode": "value",
+        "justifyMode": "center",
+        "orientation": "auto",
+        "wideLayout": true
+      },
+      "fieldConfig": {
+        "defaults": {
+          "unit": "none",
+          "noValue": "0",
+          "decimals": 0,
+          "color": {
+            "mode": "thresholds"
+          },
+          "thresholds": {
+            "mode": "absolute",
+            "steps": [
+              {
+                "color": "#56A64B",
+                "value": null
+              },
+              {
+                "color": "#A352CC",
+                "value": 1
+              }
+            ]
+          }
+        },
+        "overrides": []
+      }
+    },
+    {
+      "id": 5,
+      "type": "stat",
+      "title": "IP bloquées",
+      "description": "Blocages automatiques par la réponse active (force brute SSH). Une IP interne ici mérite une vérification.",
+      "datasource": {
+        "type": "grafana-opensearch-datasource",
+        "uid": "wazuh-opensearch"
+      },
+      "gridPos": {
+        "x": 12,
+        "y": 2,
+        "w": 4,
+        "h": 5
+      },
+      "targets": [
+        {
+          "refId": "A",
+          "datasource": {
+            "type": "grafana-opensearch-datasource",
+            "uid": "wazuh-opensearch"
+          },
+          "queryType": "lucene",
+          "query": "(rule.groups:active_response AND rule.id:651) AND agent.name:${agent:lucene}",
+          "timeField": "@timestamp",
+          "metrics": [
+            {
+              "id": "1",
+              "type": "count"
+            }
+          ],
+          "bucketAggs": [
+            {
+              "id": "2",
+              "type": "date_histogram",
+              "field": "@timestamp",
+              "settings": {
+                "interval": "auto",
+                "min_doc_count": "0"
+              }
+            }
+          ]
+        }
+      ],
+      "options": {
+        "reduceOptions": {
+          "calcs": [
+            "sum"
+          ],
+          "fields": "",
+          "values": false
+        },
+        "colorMode": "background",
+        "graphMode": "area",
+        "textMode": "value",
+        "justifyMode": "center",
+        "orientation": "auto",
+        "wideLayout": true
+      },
+      "fieldConfig": {
+        "defaults": {
+          "unit": "none",
+          "noValue": "0",
+          "decimals": 0,
+          "color": {
+            "mode": "thresholds"
+          },
+          "thresholds": {
+            "mode": "absolute",
+            "steps": [
+              {
+                "color": "#56A64B",
+                "value": null
+              },
+              {
+                "color": "#FF780A",
+                "value": 1
+              }
+            ]
+          }
+        },
+        "overrides": []
+      }
+    },
+    {
+      "id": 6,
+      "type": "stat",
+      "title": "Alertes au total",
+      "description": "Toutes les alertes enregistrées sur la période (tous niveaux).",
+      "datasource": {
+        "type": "grafana-opensearch-datasource",
+        "uid": "wazuh-opensearch"
+      },
+      "gridPos": {
+        "x": 16,
+        "y": 2,
+        "w": 4,
+        "h": 5
+      },
+      "targets": [
+        {
+          "refId": "A",
+          "datasource": {
+            "type": "grafana-opensearch-datasource",
+            "uid": "wazuh-opensearch"
+          },
+          "queryType": "lucene",
+          "query": "agent.name:${agent:lucene}",
+          "timeField": "@timestamp",
+          "metrics": [
+            {
+              "id": "1",
+              "type": "count"
+            }
+          ],
+          "bucketAggs": [
+            {
+              "id": "2",
+              "type": "date_histogram",
+              "field": "@timestamp",
+              "settings": {
+                "interval": "auto",
+                "min_doc_count": "0"
+              }
+            }
+          ]
+        }
+      ],
+      "options": {
+        "reduceOptions": {
+          "calcs": [
+            "sum"
+          ],
+          "fields": "",
+          "values": false
+        },
+        "colorMode": "background",
+        "graphMode": "area",
+        "textMode": "value",
+        "justifyMode": "center",
+        "orientation": "auto",
+        "wideLayout": true
+      },
+      "fieldConfig": {
+        "defaults": {
+          "unit": "none",
+          "noValue": "0",
+          "decimals": 0,
+          "color": {
+            "mode": "thresholds"
+          },
+          "thresholds": {
+            "mode": "absolute",
+            "steps": [
+              {
+                "color": "#3274D9",
+                "value": null
+              }
+            ]
+          }
+        },
+        "overrides": []
+      }
+    },
+    {
+      "id": 7,
+      "type": "stat",
+      "title": "Machines qui remontent",
+      "description": "Nombre de machines ayant envoyé au moins une alerte sur la période. Une baisse soudaine = agent arrêté ou coupure réseau.",
+      "datasource": {
+        "type": "grafana-opensearch-datasource",
+        "uid": "wazuh-opensearch"
+      },
+      "gridPos": {
+        "x": 20,
+        "y": 2,
+        "w": 4,
+        "h": 5
+      },
+      "targets": [
+        {
+          "refId": "A",
+          "datasource": {
+            "type": "grafana-opensearch-datasource",
+            "uid": "wazuh-opensearch"
+          },
+          "queryType": "lucene",
+          "query": "agent.name:${agent:lucene}",
+          "timeField": "@timestamp",
+          "metrics": [
+            {
+              "id": "1",
+              "type": "count"
+            }
+          ],
+          "bucketAggs": [
+            {
+              "id": "2",
+              "type": "terms",
+              "field": "agent.name",
+              "settings": {
+                "size": "1000",
+                "order": "desc",
+                "orderBy": "_count",
+                "min_doc_count": "1"
+              }
+            }
+          ]
+        }
+      ],
+      "options": {
+        "reduceOptions": {
+          "calcs": [
+            "count"
+          ],
+          "fields": "",
+          "values": false
+        },
+        "colorMode": "background",
+        "graphMode": "none",
+        "textMode": "value",
+        "justifyMode": "center",
+        "orientation": "auto",
+        "wideLayout": true
+      },
+      "fieldConfig": {
+        "defaults": {
+          "unit": "none",
+          "noValue": "0",
+          "decimals": 0,
+          "color": {
+            "mode": "thresholds"
+          },
+          "thresholds": {
+            "mode": "absolute",
+            "steps": [
+              {
+                "color": "#56A64B",
+                "value": null
+              }
+            ]
+          }
+        },
+        "overrides": []
+      }
+    },
+    {
+      "id": 8,
+      "type": "timeseries",
+      "title": "Alertes dans le temps, par gravité",
+      "description": "Barres empilées : un pic rouge ou orange est à examiner en priorité. Cliquer-glisser pour zoomer.",
+      "datasource": {
+        "type": "grafana-opensearch-datasource",
+        "uid": "wazuh-opensearch"
+      },
+      "gridPos": {
+        "x": 0,
+        "y": 7,
+        "w": 16,
+        "h": 8
+      },
+      "targets": [
+        {
+          "refId": "A",
+          "datasource": {
+            "type": "grafana-opensearch-datasource",
+            "uid": "wazuh-opensearch"
+          },
+          "queryType": "lucene",
+          "query": "(rule.level:<7) AND agent.name:${agent:lucene}",
+          "timeField": "@timestamp",
+          "metrics": [
+            {
+              "id": "1",
+              "type": "count"
+            }
+          ],
+          "bucketAggs": [
+            {
+              "id": "2",
+              "type": "date_histogram",
+              "field": "@timestamp",
+              "settings": {
+                "interval": "auto",
+                "min_doc_count": "0"
+              }
+            }
+          ],
+          "alias": "Information (< 7)"
+        },
+        {
+          "refId": "B",
+          "datasource": {
+            "type": "grafana-opensearch-datasource",
+            "uid": "wazuh-opensearch"
+          },
+          "queryType": "lucene",
+          "query": "(rule.level:[7 TO 9]) AND agent.name:${agent:lucene}",
+          "timeField": "@timestamp",
+          "metrics": [
+            {
+              "id": "1",
+              "type": "count"
+            }
+          ],
+          "bucketAggs": [
+            {
+              "id": "2",
+              "type": "date_histogram",
+              "field": "@timestamp",
+              "settings": {
+                "interval": "auto",
+                "min_doc_count": "0"
+              }
+            }
+          ],
+          "alias": "À surveiller (7-9)"
+        },
+        {
+          "refId": "C",
+          "datasource": {
+            "type": "grafana-opensearch-datasource",
+            "uid": "wazuh-opensearch"
+          },
+          "queryType": "lucene",
+          "query": "(rule.level:[10 TO 11]) AND agent.name:${agent:lucene}",
+          "timeField": "@timestamp",
+          "metrics": [
+            {
+              "id": "1",
+              "type": "count"
+            }
+          ],
+          "bucketAggs": [
+            {
+              "id": "2",
+              "type": "date_histogram",
+              "field": "@timestamp",
+              "settings": {
+                "interval": "auto",
+                "min_doc_count": "0"
+              }
+            }
+          ],
+          "alias": "Suspect (10-11)"
+        },
+        {
+          "refId": "D",
+          "datasource": {
+            "type": "grafana-opensearch-datasource",
+            "uid": "wazuh-opensearch"
+          },
+          "queryType": "lucene",
+          "query": "(rule.level:>=12) AND agent.name:${agent:lucene}",
+          "timeField": "@timestamp",
+          "metrics": [
+            {
+              "id": "1",
+              "type": "count"
+            }
+          ],
+          "bucketAggs": [
+            {
+              "id": "2",
+              "type": "date_histogram",
+              "field": "@timestamp",
+              "settings": {
+                "interval": "auto",
+                "min_doc_count": "0"
+              }
+            }
+          ],
+          "alias": "Incident probable (≥ 12)"
+        }
+      ],
+      "options": {
+        "legend": {
+          "displayMode": "list",
+          "placement": "bottom",
+          "showLegend": true
+        },
+        "tooltip": {
+          "mode": "multi",
+          "sort": "desc"
+        }
+      },
+      "fieldConfig": {
+        "defaults": {
+          "custom": {
+            "drawStyle": "bars",
+            "fillOpacity": 85,
+            "lineWidth": 0,
+            "stacking": {
+              "mode": "normal"
+            },
+            "barAlignment": 0,
+            "gradientMode": "none",
+            "axisSoftMin": 0
+          },
+          "color": {
+            "mode": "fixed"
+          },
+          "decimals": 0
+        },
+        "overrides": [
+          {
+            "matcher": {
+              "id": "byName",
+              "options": "Information (< 7)"
+            },
+            "properties": [
+              {
+                "id": "color",
+                "value": {
+                  "mode": "fixed",
+                  "fixedColor": "#56A64B"
+                }
+              }
+            ]
+          },
+          {
+            "matcher": {
+              "id": "byName",
+              "options": "À surveiller (7-9)"
+            },
+            "properties": [
+              {
+                "id": "color",
+                "value": {
+                  "mode": "fixed",
+                  "fixedColor": "#FADE2A"
+                }
+              }
+            ]
+          },
+          {
+            "matcher": {
+              "id": "byName",
+              "options": "Suspect (10-11)"
+            },
+            "properties": [
+              {
+                "id": "color",
+                "value": {
+                  "mode": "fixed",
+                  "fixedColor": "#FF780A"
+                }
+              }
+            ]
+          },
+          {
+            "matcher": {
+              "id": "byName",
+              "options": "Incident probable (≥ 12)"
+            },
+            "properties": [
+              {
+                "id": "color",
+                "value": {
+                  "mode": "fixed",
+                  "fixedColor": "#E02F44"
+                }
+              }
+            ]
+          }
+        ]
+      }
+    },
+    {
+      "id": 9,
+      "type": "piechart",
+      "title": "Nature des alertes (≥ 7)",
+      "description": "Familles de règles (rule.groups) des alertes de niveau 7 et plus.",
+      "datasource": {
+        "type": "grafana-opensearch-datasource",
+        "uid": "wazuh-opensearch"
+      },
+      "gridPos": {
+        "x": 16,
+        "y": 7,
+        "w": 8,
+        "h": 8
+      },
+      "targets": [
+        {
+          "refId": "A",
+          "datasource": {
+            "type": "grafana-opensearch-datasource",
+            "uid": "wazuh-opensearch"
+          },
+          "queryType": "lucene",
+          "query": "(rule.level:>=7) AND agent.name:${agent:lucene}",
+          "timeField": "@timestamp",
+          "metrics": [
+            {
+              "id": "1",
+              "type": "count"
+            }
+          ],
+          "bucketAggs": [
+            {
+              "id": "2",
+              "type": "terms",
+              "field": "rule.groups",
+              "settings": {
+                "size": "8",
+                "order": "desc",
+                "orderBy": "_count",
+                "min_doc_count": "1"
+              }
+            }
+          ]
+        }
+      ],
+      "options": {
+        "pieType": "donut",
+        "reduceOptions": {
+          "calcs": [
+            "lastNotNull"
+          ],
+          "fields": "",
+          "values": true
+        },
+        "legend": {
+          "displayMode": "table",
+          "placement": "right",
+          "showLegend": true,
+          "values": [
+            "value"
+          ]
+        },
+        "tooltip": {
+          "mode": "single"
+        },
+        "displayLabels": []
+      },
+      "fieldConfig": {
+        "defaults": {
+          "color": {
+            "mode": "palette-classic"
+          },
+          "decimals": 0
+        },
+        "overrides": []
+      }
+    },
+    {
+      "id": 10,
+      "type": "bargauge",
+      "title": "Machines les plus en alerte (≥ 7)",
+      "description": "Les 10 machines qui génèrent le plus d'alertes significatives : commencer l'analyse par elles.",
+      "datasource": {
+        "type": "grafana-opensearch-datasource",
+        "uid": "wazuh-opensearch"
+      },
+      "gridPos": {
+        "x": 0,
+        "y": 15,
+        "w": 8,
+        "h": 9
+      },
+      "targets": [
+        {
+          "refId": "A",
+          "datasource": {
+            "type": "grafana-opensearch-datasource",
+            "uid": "wazuh-opensearch"
+          },
+          "queryType": "lucene",
+          "query": "(rule.level:>=7) AND agent.name:${agent:lucene}",
+          "timeField": "@timestamp",
+          "metrics": [
+            {
+              "id": "1",
+              "type": "count"
+            }
+          ],
+          "bucketAggs": [
+            {
+              "id": "2",
+              "type": "terms",
+              "field": "agent.name",
+              "settings": {
+                "size": "10",
+                "order": "desc",
+                "orderBy": "_count",
+                "min_doc_count": "1"
+              }
+            }
+          ]
+        }
+      ],
+      "options": {
+        "reduceOptions": {
+          "calcs": [
+            "lastNotNull"
+          ],
+          "fields": "",
+          "values": true
+        },
+        "orientation": "horizontal",
+        "displayMode": "gradient",
+        "valueMode": "color",
+        "showUnfilled": true,
+        "namePlacement": "left",
+        "sizing": "auto",
+        "minVizHeight": 14,
+        "maxVizHeight": 22
+      },
+      "fieldConfig": {
+        "defaults": {
+          "color": {
+            "mode": "continuous-GrYlRd",
+            "fixedColor": "#3274D9"
+          },
+          "min": 0,
+          "noValue": "Aucune donnée",
+          "decimals": 0
+        },
+        "overrides": []
+      }
+    },
+    {
+      "id": 11,
+      "type": "bargauge",
+      "title": "Règles les plus déclenchées (≥ 7)",
+      "description": "Une règle très bavarde est soit un vrai problème récurrent, soit un faux positif à régler (voir le manuel : « faire taire un faux positif »).",
+      "datasource": {
+        "type": "grafana-opensearch-datasource",
+        "uid": "wazuh-opensearch"
+      },
+      "gridPos": {
+        "x": 8,
+        "y": 15,
+        "w": 8,
+        "h": 9
+      },
+      "targets": [
+        {
+          "refId": "A",
+          "datasource": {
+            "type": "grafana-opensearch-datasource",
+            "uid": "wazuh-opensearch"
+          },
+          "queryType": "lucene",
+          "query": "(rule.level:>=7) AND agent.name:${agent:lucene}",
+          "timeField": "@timestamp",
+          "metrics": [
+            {
+              "id": "1",
+              "type": "count"
+            }
+          ],
+          "bucketAggs": [
+            {
+              "id": "2",
+              "type": "terms",
+              "field": "rule.description",
+              "settings": {
+                "size": "10",
+                "order": "desc",
+                "orderBy": "_count",
+                "min_doc_count": "1"
+              }
+            }
+          ]
+        }
+      ],
+      "options": {
+        "reduceOptions": {
+          "calcs": [
+            "lastNotNull"
+          ],
+          "fields": "",
+          "values": true
+        },
+        "orientation": "horizontal",
+        "displayMode": "gradient",
+        "valueMode": "color",
+        "showUnfilled": true,
+        "namePlacement": "left",
+        "sizing": "auto",
+        "minVizHeight": 14,
+        "maxVizHeight": 22
+      },
+      "fieldConfig": {
+        "defaults": {
+          "color": {
+            "mode": "fixed",
+            "fixedColor": "#FF780A"
+          },
+          "min": 0,
+          "noValue": "Aucune donnée",
+          "decimals": 0
+        },
+        "overrides": []
+      }
+    },
+    {
+      "id": 12,
+      "type": "bargauge",
+      "title": "IP à l'origine d'échecs de connexion",
+      "description": "Adresses sources des échecs d'authentification (SSH, Windows…). Une IP externe en tête = attaque par force brute ; une IP interne = mot de passe expiré ou compte de service mal configuré.",
+      "datasource": {
+        "type": "grafana-opensearch-datasource",
+        "uid": "wazuh-opensearch"
+      },
+      "gridPos": {
+        "x": 16,
+        "y": 15,
+        "w": 8,
+        "h": 9
+      },
+      "targets": [
+        {
+          "refId": "A",
+          "datasource": {
+            "type": "grafana-opensearch-datasource",
+            "uid": "wazuh-opensearch"
+          },
+          "queryType": "lucene",
+          "query": "(rule.groups:authentication_failed OR rule.groups:authentication_failures) AND agent.name:${agent:lucene}",
+          "timeField": "@timestamp",
+          "metrics": [
+            {
+              "id": "1",
+              "type": "count"
+            }
+          ],
+          "bucketAggs": [
+            {
+              "id": "2",
+              "type": "terms",
+              "field": "data.srcip",
+              "settings": {
+                "size": "10",
+                "order": "desc",
+                "orderBy": "_count",
+                "min_doc_count": "1"
+              }
+            }
+          ]
+        }
+      ],
+      "options": {
+        "reduceOptions": {
+          "calcs": [
+            "lastNotNull"
+          ],
+          "fields": "",
+          "values": true
+        },
+        "orientation": "horizontal",
+        "displayMode": "gradient",
+        "valueMode": "color",
+        "showUnfilled": true,
+        "namePlacement": "left",
+        "sizing": "auto",
+        "minVizHeight": 14,
+        "maxVizHeight": 22
+      },
+      "fieldConfig": {
+        "defaults": {
+          "color": {
+            "mode": "fixed",
+            "fixedColor": "#E02F44"
+          },
+          "min": 0,
+          "noValue": "Aucune donnée",
+          "decimals": 0
+        },
+        "overrides": []
+      }
+    },
+    {
+      "id": 13,
+      "type": "row",
+      "title": "À traiter",
+      "collapsed": false,
+      "gridPos": {
+        "x": 0,
+        "y": 24,
+        "w": 24,
+        "h": 1
+      },
+      "panels": []
+    },
+    {
+      "id": 14,
+      "type": "table",
+      "title": "Incidents probables et suspects (niveau ≥ 10)",
+      "description": "Les 100 dernières alertes de niveau 10 et plus. Filtrer une colonne avec l'entonnoir de l'en-tête. Pour le détail complet : Wazuh Dashboard > Threat Hunting, rechercher rule.id et la machine.",
+      "datasource": {
+        "type": "grafana-opensearch-datasource",
+        "uid": "wazuh-opensearch"
+      },
+      "gridPos": {
+        "x": 0,
+        "y": 25,
+        "w": 24,
+        "h": 10
+      },
+      "targets": [
+        {
+          "refId": "A",
+          "datasource": {
+            "type": "grafana-opensearch-datasource",
+            "uid": "wazuh-opensearch"
+          },
+          "queryType": "lucene",
+          "query": "(rule.level:>=10) AND agent.name:${agent:lucene}",
+          "timeField": "@timestamp",
+          "metrics": [
+            {
+              "id": "1",
+              "type": "raw_data",
+              "settings": {
+                "size": "100"
+              }
+            }
+          ],
+          "bucketAggs": []
+        }
+      ],
+      "transformations": [
+        {
+          "id": "filterFieldsByName",
+          "options": {
+            "include": {
+              "names": [
+                "@timestamp",
+                "rule.level",
+                "agent.name",
+                "rule.id",
+                "rule.description",
+                "data.srcip",
+                "syscheck.path"
+              ]
+            }
+          }
+        },
+        {
+          "id": "organize",
+          "options": {
+            "indexByName": {
+              "@timestamp": 0,
+              "rule.level": 1,
+              "agent.name": 2,
+              "rule.id": 3,
+              "rule.description": 4,
+              "data.srcip": 5,
+              "syscheck.path": 6
+            }
+          }
+        }
+      ],
+      "options": {
+        "showHeader": true,
+        "cellHeight": "sm",
+        "footer": {
+          "show": false
+        },
+        "sortBy": [
+          {
+            "displayName": "Date",
+            "desc": true
+          }
+        ]
+      },
+      "fieldConfig": {
+        "defaults": {
+          "custom": {
+            "align": "left",
+            "filterable": true,
+            "cellOptions": {
+              "type": "auto"
+            }
+          },
+          "noValue": "—"
+        },
+        "overrides": [
+          {
+            "matcher": {
+              "id": "byName",
+              "options": "@timestamp"
+            },
+            "properties": [
+              {
+                "id": "displayName",
+                "value": "Date"
+              },
+              {
+                "id": "custom.width",
+                "value": 165
+              }
+            ]
+          },
+          {
+            "matcher": {
+              "id": "byName",
+              "options": "rule.level"
+            },
+            "properties": [
+              {
+                "id": "displayName",
+                "value": "Niveau"
+              },
+              {
+                "id": "custom.width",
+                "value": 75
+              },
+              {
+                "id": "custom.cellOptions",
+                "value": {
+                  "type": "color-background",
+                  "mode": "basic"
+                }
+              },
+              {
+                "id": "color",
+                "value": {
+                  "mode": "thresholds"
+                }
+              },
+              {
+                "id": "thresholds",
+                "value": {
+                  "mode": "absolute",
+                  "steps": [
+                    {
+                      "color": "#56A64B",
+                      "value": null
+                    },
+                    {
+                      "color": "#FADE2A",
+                      "value": 7
+                    },
+                    {
+                      "color": "#FF780A",
+                      "value": 10
+                    },
+                    {
+                      "color": "#E02F44",
+                      "value": 12
+                    }
+                  ]
+                }
+              }
+            ]
+          },
+          {
+            "matcher": {
+              "id": "byName",
+              "options": "agent.name"
+            },
+            "properties": [
+              {
+                "id": "displayName",
+                "value": "Machine"
+              },
+              {
+                "id": "custom.width",
+                "value": 150
+              }
+            ]
+          },
+          {
+            "matcher": {
+              "id": "byName",
+              "options": "rule.id"
+            },
+            "properties": [
+              {
+                "id": "displayName",
+                "value": "Règle"
+              },
+              {
+                "id": "custom.width",
+                "value": 75
+              }
+            ]
+          },
+          {
+            "matcher": {
+              "id": "byName",
+              "options": "rule.description"
+            },
+            "properties": [
+              {
+                "id": "displayName",
+                "value": "Description"
+              }
+            ]
+          },
+          {
+            "matcher": {
+              "id": "byName",
+              "options": "data.srcip"
+            },
+            "properties": [
+              {
+                "id": "displayName",
+                "value": "IP source"
+              },
+              {
+                "id": "custom.width",
+                "value": 120
+              }
+            ]
+          },
+          {
+            "matcher": {
+              "id": "byName",
+              "options": "syscheck.path"
+            },
+            "properties": [
+              {
+                "id": "displayName",
+                "value": "Fichier"
+              },
+              {
+                "id": "custom.width",
+                "value": 220
+              }
+            ]
+          }
+        ]
+      }
+    },
+    {
+      "id": 17,
+      "type": "row",
+      "title": "Malware et intégrité des fichiers",
+      "collapsed": true,
+      "gridPos": {
+        "x": 0,
+        "y": 35,
+        "w": 24,
+        "h": 1
+      },
+      "panels": [
+        {
+          "id": 15,
+          "type": "table",
+          "title": "Détections malware",
+          "description": "YARA, liste de hashes, Windows Defender. 100512 = le scanner YARA d'une machine ne fonctionne pas.",
+          "datasource": {
+            "type": "grafana-opensearch-datasource",
+            "uid": "wazuh-opensearch"
+          },
+          "gridPos": {
+            "x": 0,
+            "y": 36,
+            "w": 12,
+            "h": 9
+          },
+          "targets": [
+            {
+              "refId": "A",
+              "datasource": {
+                "type": "grafana-opensearch-datasource",
+                "uid": "wazuh-opensearch"
+              },
+              "queryType": "lucene",
+              "query": "(rule.groups:malware OR rule.id:(100500 OR 100511 OR 100512 OR 100540 OR 100541)) AND agent.name:${agent:lucene}",
+              "timeField": "@timestamp",
+              "metrics": [
+                {
+                  "id": "1",
+                  "type": "raw_data",
+                  "settings": {
+                    "size": "100"
+                  }
+                }
+              ],
+              "bucketAggs": []
+            }
+          ],
+          "transformations": [
+            {
+              "id": "filterFieldsByName",
+              "options": {
+                "include": {
+                  "names": [
+                    "@timestamp",
+                    "rule.level",
+                    "agent.name",
+                    "rule.description",
+                    "data.yara_rule",
+                    "syscheck.path"
+                  ]
+                }
+              }
+            },
+            {
+              "id": "organize",
+              "options": {
+                "indexByName": {
+                  "@timestamp": 0,
+                  "rule.level": 1,
+                  "agent.name": 2,
+                  "rule.description": 3,
+                  "data.yara_rule": 4,
+                  "syscheck.path": 5
+                }
+              }
+            }
+          ],
+          "options": {
+            "showHeader": true,
+            "cellHeight": "sm",
+            "footer": {
+              "show": false
+            },
+            "sortBy": [
+              {
+                "displayName": "Date",
+                "desc": true
+              }
+            ]
+          },
+          "fieldConfig": {
+            "defaults": {
+              "custom": {
+                "align": "left",
+                "filterable": true,
+                "cellOptions": {
+                  "type": "auto"
+                }
+              },
+              "noValue": "—"
+            },
+            "overrides": [
+              {
+                "matcher": {
+                  "id": "byName",
+                  "options": "@timestamp"
+                },
+                "properties": [
+                  {
+                    "id": "displayName",
+                    "value": "Date"
+                  },
+                  {
+                    "id": "custom.width",
+                    "value": 165
+                  }
+                ]
+              },
+              {
+                "matcher": {
+                  "id": "byName",
+                  "options": "rule.level"
+                },
+                "properties": [
+                  {
+                    "id": "displayName",
+                    "value": "Niveau"
+                  },
+                  {
+                    "id": "custom.width",
+                    "value": 75
+                  },
+                  {
+                    "id": "custom.cellOptions",
+                    "value": {
+                      "type": "color-background",
+                      "mode": "basic"
+                    }
+                  },
+                  {
+                    "id": "color",
+                    "value": {
+                      "mode": "thresholds"
+                    }
+                  },
+                  {
+                    "id": "thresholds",
+                    "value": {
+                      "mode": "absolute",
+                      "steps": [
+                        {
+                          "color": "#56A64B",
+                          "value": null
+                        },
+                        {
+                          "color": "#FADE2A",
+                          "value": 7
+                        },
+                        {
+                          "color": "#FF780A",
+                          "value": 10
+                        },
+                        {
+                          "color": "#E02F44",
+                          "value": 12
+                        }
+                      ]
+                    }
+                  }
+                ]
+              },
+              {
+                "matcher": {
+                  "id": "byName",
+                  "options": "agent.name"
+                },
+                "properties": [
+                  {
+                    "id": "displayName",
+                    "value": "Machine"
+                  },
+                  {
+                    "id": "custom.width",
+                    "value": 150
+                  }
+                ]
+              },
+              {
+                "matcher": {
+                  "id": "byName",
+                  "options": "rule.description"
+                },
+                "properties": [
+                  {
+                    "id": "displayName",
+                    "value": "Description"
+                  }
+                ]
+              },
+              {
+                "matcher": {
+                  "id": "byName",
+                  "options": "data.yara_rule"
+                },
+                "properties": [
+                  {
+                    "id": "displayName",
+                    "value": "Règle YARA"
+                  },
+                  {
+                    "id": "custom.width",
+                    "value": 170
+                  }
+                ]
+              },
+              {
+                "matcher": {
+                  "id": "byName",
+                  "options": "syscheck.path"
+                },
+                "properties": [
+                  {
+                    "id": "displayName",
+                    "value": "Fichier"
+                  },
+                  {
+                    "id": "custom.width",
+                    "value": 230
+                  }
+                ]
+              }
+            ]
+          }
+        },
+        {
+          "id": 16,
+          "type": "table",
+          "title": "Fichiers sensibles modifiés",
+          "description": "Clés SSH, sudoers, cron, services, comptes, ld.so.preload. Chaque ligne doit correspondre à une intervention connue.",
+          "datasource": {
+            "type": "grafana-opensearch-datasource",
+            "uid": "wazuh-opensearch"
+          },
+          "gridPos": {
+            "x": 12,
+            "y": 36,
+            "w": 12,
+            "h": 9
+          },
+          "targets": [
+            {
+              "refId": "A",
+              "datasource": {
+                "type": "grafana-opensearch-datasource",
+                "uid": "wazuh-opensearch"
+              },
+              "queryType": "lucene",
+              "query": "(rule.id:(100551 OR 100552 OR 100553 OR 100554 OR 100555 OR 100556)) AND agent.name:${agent:lucene}",
+              "timeField": "@timestamp",
+              "metrics": [
+                {
+                  "id": "1",
+                  "type": "raw_data",
+                  "settings": {
+                    "size": "100"
+                  }
+                }
+              ],
+              "bucketAggs": []
+            }
+          ],
+          "transformations": [
+            {
+              "id": "filterFieldsByName",
+              "options": {
+                "include": {
+                  "names": [
+                    "@timestamp",
+                    "rule.level",
+                    "agent.name",
+                    "syscheck.path",
+                    "syscheck.event",
+                    "rule.description"
+                  ]
+                }
+              }
+            },
+            {
+              "id": "organize",
+              "options": {
+                "indexByName": {
+                  "@timestamp": 0,
+                  "rule.level": 1,
+                  "agent.name": 2,
+                  "syscheck.path": 3,
+                  "syscheck.event": 4,
+                  "rule.description": 5
+                }
+              }
+            }
+          ],
+          "options": {
+            "showHeader": true,
+            "cellHeight": "sm",
+            "footer": {
+              "show": false
+            },
+            "sortBy": [
+              {
+                "displayName": "Date",
+                "desc": true
+              }
+            ]
+          },
+          "fieldConfig": {
+            "defaults": {
+              "custom": {
+                "align": "left",
+                "filterable": true,
+                "cellOptions": {
+                  "type": "auto"
+                }
+              },
+              "noValue": "—"
+            },
+            "overrides": [
+              {
+                "matcher": {
+                  "id": "byName",
+                  "options": "@timestamp"
+                },
+                "properties": [
+                  {
+                    "id": "displayName",
+                    "value": "Date"
+                  },
+                  {
+                    "id": "custom.width",
+                    "value": 165
+                  }
+                ]
+              },
+              {
+                "matcher": {
+                  "id": "byName",
+                  "options": "rule.level"
+                },
+                "properties": [
+                  {
+                    "id": "displayName",
+                    "value": "Niveau"
+                  },
+                  {
+                    "id": "custom.width",
+                    "value": 75
+                  },
+                  {
+                    "id": "custom.cellOptions",
+                    "value": {
+                      "type": "color-background",
+                      "mode": "basic"
+                    }
+                  },
+                  {
+                    "id": "color",
+                    "value": {
+                      "mode": "thresholds"
+                    }
+                  },
+                  {
+                    "id": "thresholds",
+                    "value": {
+                      "mode": "absolute",
+                      "steps": [
+                        {
+                          "color": "#56A64B",
+                          "value": null
+                        },
+                        {
+                          "color": "#FADE2A",
+                          "value": 7
+                        },
+                        {
+                          "color": "#FF780A",
+                          "value": 10
+                        },
+                        {
+                          "color": "#E02F44",
+                          "value": 12
+                        }
+                      ]
+                    }
+                  }
+                ]
+              },
+              {
+                "matcher": {
+                  "id": "byName",
+                  "options": "agent.name"
+                },
+                "properties": [
+                  {
+                    "id": "displayName",
+                    "value": "Machine"
+                  },
+                  {
+                    "id": "custom.width",
+                    "value": 150
+                  }
+                ]
+              },
+              {
+                "matcher": {
+                  "id": "byName",
+                  "options": "syscheck.path"
+                },
+                "properties": [
+                  {
+                    "id": "displayName",
+                    "value": "Fichier"
+                  },
+                  {
+                    "id": "custom.width",
+                    "value": 230
+                  }
+                ]
+              },
+              {
+                "matcher": {
+                  "id": "byName",
+                  "options": "syscheck.event"
+                },
+                "properties": [
+                  {
+                    "id": "displayName",
+                    "value": "Action"
+                  },
+                  {
+                    "id": "custom.width",
+                    "value": 90
+                  }
+                ]
+              },
+              {
+                "matcher": {
+                  "id": "byName",
+                  "options": "rule.description"
+                },
+                "properties": [
+                  {
+                    "id": "displayName",
+                    "value": "Description"
+                  }
+                ]
+              }
+            ]
+          }
+        }
+      ]
+    },
+    {
+      "id": 20,
+      "type": "row",
+      "title": "Connexions et blocages",
+      "collapsed": true,
+      "gridPos": {
+        "x": 0,
+        "y": 37,
+        "w": 24,
+        "h": 1
+      },
+      "panels": [
+        {
+          "id": 18,
+          "type": "timeseries",
+          "title": "Connexions réussies et échouées",
+          "description": "Un pic d'échecs suivi d'un succès depuis la même IP est un signal fort de compromission.",
+          "datasource": {
+            "type": "grafana-opensearch-datasource",
+            "uid": "wazuh-opensearch"
+          },
+          "gridPos": {
+            "x": 0,
+            "y": 38,
+            "w": 12,
+            "h": 8
+          },
+          "targets": [
+            {
+              "refId": "A",
+              "datasource": {
+                "type": "grafana-opensearch-datasource",
+                "uid": "wazuh-opensearch"
+              },
+              "queryType": "lucene",
+              "query": "(rule.groups:authentication_success) AND agent.name:${agent:lucene}",
+              "timeField": "@timestamp",
+              "metrics": [
+                {
+                  "id": "1",
+                  "type": "count"
+                }
+              ],
+              "bucketAggs": [
+                {
+                  "id": "2",
+                  "type": "date_histogram",
+                  "field": "@timestamp",
+                  "settings": {
+                    "interval": "auto",
+                    "min_doc_count": "0"
+                  }
+                }
+              ],
+              "alias": "Réussies"
+            },
+            {
+              "refId": "B",
+              "datasource": {
+                "type": "grafana-opensearch-datasource",
+                "uid": "wazuh-opensearch"
+              },
+              "queryType": "lucene",
+              "query": "(rule.groups:authentication_failed OR rule.groups:authentication_failures) AND agent.name:${agent:lucene}",
+              "timeField": "@timestamp",
+              "metrics": [
+                {
+                  "id": "1",
+                  "type": "count"
+                }
+              ],
+              "bucketAggs": [
+                {
+                  "id": "2",
+                  "type": "date_histogram",
+                  "field": "@timestamp",
+                  "settings": {
+                    "interval": "auto",
+                    "min_doc_count": "0"
+                  }
+                }
+              ],
+              "alias": "Échouées"
+            }
+          ],
+          "options": {
+            "legend": {
+              "displayMode": "list",
+              "placement": "bottom",
+              "showLegend": true
+            },
+            "tooltip": {
+              "mode": "multi"
+            }
+          },
+          "fieldConfig": {
+            "defaults": {
+              "custom": {
+                "drawStyle": "line",
+                "lineWidth": 2,
+                "fillOpacity": 15,
+                "showPoints": "never",
+                "axisSoftMin": 0
+              },
+              "decimals": 0
+            },
+            "overrides": [
+              {
+                "matcher": {
+                  "id": "byName",
+                  "options": "Réussies"
+                },
+                "properties": [
+                  {
+                    "id": "color",
+                    "value": {
+                      "mode": "fixed",
+                      "fixedColor": "#56A64B"
+                    }
+                  }
+                ]
+              },
+              {
+                "matcher": {
+                  "id": "byName",
+                  "options": "Échouées"
+                },
+                "properties": [
+                  {
+                    "id": "color",
+                    "value": {
+                      "mode": "fixed",
+                      "fixedColor": "#E02F44"
+                    }
+                  }
+                ]
+              }
+            ]
+          }
+        },
+        {
+          "id": 19,
+          "type": "table",
+          "title": "Blocages automatiques (réponse active)",
+          "description": "Chaque blocage dure la durée choisie à l'installation puis est levé automatiquement.",
+          "datasource": {
+            "type": "grafana-opensearch-datasource",
+            "uid": "wazuh-opensearch"
+          },
+          "gridPos": {
+            "x": 12,
+            "y": 38,
+            "w": 12,
+            "h": 8
+          },
+          "targets": [
+            {
+              "refId": "A",
+              "datasource": {
+                "type": "grafana-opensearch-datasource",
+                "uid": "wazuh-opensearch"
+              },
+              "queryType": "lucene",
+              "query": "(rule.groups:active_response) AND agent.name:${agent:lucene}",
+              "timeField": "@timestamp",
+              "metrics": [
+                {
+                  "id": "1",
+                  "type": "raw_data",
+                  "settings": {
+                    "size": "100"
+                  }
+                }
+              ],
+              "bucketAggs": []
+            }
+          ],
+          "transformations": [
+            {
+              "id": "filterFieldsByName",
+              "options": {
+                "include": {
+                  "names": [
+                    "@timestamp",
+                    "agent.name",
+                    "data.srcip",
+                    "rule.description"
+                  ]
+                }
+              }
+            },
+            {
+              "id": "organize",
+              "options": {
+                "indexByName": {
+                  "@timestamp": 0,
+                  "agent.name": 1,
+                  "data.srcip": 2,
+                  "rule.description": 3
+                }
+              }
+            }
+          ],
+          "options": {
+            "showHeader": true,
+            "cellHeight": "sm",
+            "footer": {
+              "show": false
+            },
+            "sortBy": [
+              {
+                "displayName": "Date",
+                "desc": true
+              }
+            ]
+          },
+          "fieldConfig": {
+            "defaults": {
+              "custom": {
+                "align": "left",
+                "filterable": true,
+                "cellOptions": {
+                  "type": "auto"
+                }
+              },
+              "noValue": "—"
+            },
+            "overrides": [
+              {
+                "matcher": {
+                  "id": "byName",
+                  "options": "@timestamp"
+                },
+                "properties": [
+                  {
+                    "id": "displayName",
+                    "value": "Date"
+                  },
+                  {
+                    "id": "custom.width",
+                    "value": 165
+                  }
+                ]
+              },
+              {
+                "matcher": {
+                  "id": "byName",
+                  "options": "agent.name"
+                },
+                "properties": [
+                  {
+                    "id": "displayName",
+                    "value": "Machine"
+                  },
+                  {
+                    "id": "custom.width",
+                    "value": 150
+                  }
+                ]
+              },
+              {
+                "matcher": {
+                  "id": "byName",
+                  "options": "data.srcip"
+                },
+                "properties": [
+                  {
+                    "id": "displayName",
+                    "value": "IP bloquée"
+                  },
+                  {
+                    "id": "custom.width",
+                    "value": 130
+                  }
+                ]
+              },
+              {
+                "matcher": {
+                  "id": "byName",
+                  "options": "rule.description"
+                },
+                "properties": [
+                  {
+                    "id": "displayName",
+                    "value": "Action"
+                  }
+                ]
+              }
+            ]
+          }
+        }
+      ]
+    }
+  ]
+}

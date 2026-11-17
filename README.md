@@ -61,6 +61,47 @@ Pour le régénérer après une modification :
 python3 docs/guide/build_pdf.py
 ```
 
+## Manuel d'exploitation (à remettre au client)
+
+[`docs/Manuel_exploitation_SIEM_Wazuh.pdf`](docs/Manuel_exploitation_SIEM_Wazuh.pdf) est centré sur les gestes
+de l'exploitant. Il contient un exercice pratique par chapitre et une page de repères à cocher. Il couvre :
+
+- le coup d'œil quotidien ;
+- l'analyse d'une alerte ;
+- l'ajout de machines ;
+- la configuration de la surveillance ;
+- l'écriture de règles et de décodeurs ;
+- les réglages ;
+- l'entretien et le dépannage.
+
+Pour le régénérer :
+
+```bash
+python3 docs/manuel/build_manuel.py
+```
+
+## Tableaux de bord Grafana
+
+| Tableau de bord | Fichier | Usage |
+|---|---|---|
+| **Wazuh — Poste de commande** | `configs/grafana/dashboards/wazuh-overview.json` | Vue d'ensemble (détaillée ci-dessous) |
+| Wazuh — Vue SOC | `configs/grafana/dashboards/wazuh-soc.json` | Vue détaillée historique |
+
+Le poste de commande se lit de haut en bas :
+
+- six indicateurs : incidents probables, suspects, malware, IP bloquées, total, machines actives ;
+- la tendance par gravité ;
+- les machines, règles et IP les plus fréquentes ;
+- la table « À traiter » ;
+- deux rangées repliées : malware et fichiers, connexions et blocages.
+
+Un filtre « Machine » s'applique à toute la page. Les deux tableaux de bord sont provisionnés par l'étape 09.
+Le poste de commande est généré par `grafana/build_dashboard.py` : modifiez ce script, puis régénérez le JSON :
+
+```bash
+python3 grafana/build_dashboard.py
+```
+
 ## Les étapes
 
 | Étape | Rôle | Questions principales |

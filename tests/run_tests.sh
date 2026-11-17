@@ -12,7 +12,7 @@ t() { # t "nom" commande...
 }
 need() { command -v "$1" >/dev/null || { echo "[SKIP-FATAL] outil manquant : $1"; exit 2; }; }
 for c in python3 xmllint yara jq; do need "$c"; done
-TMP="$(mktemp -d)"; trap 'rm -rf "$TMP"' EXIT
+TMP="$(mktemp -d)"; trap 'rm -rf "$TMP"' EXIT; export TMP
 SCRIPTS=(install.sh lib/*.sh steps/*.sh tools/*.sh agents/*.sh grafana/*.sh)
 # Environnement isolé pour la bibliothèque (aucune écriture dans /etc ou /root)
 export BUNDLE_STATE_DIR="$TMP/state" BUNDLE_SECRETS_DIR="$TMP/secrets" BUNDLE_LOG_DIR="$TMP/log"
@@ -35,6 +35,11 @@ t "malware_rules.xml (après substitution)" xmllint --noout "$TMP/malware_rules.
 t "malware_decoders.xml" wrap configs/manager/malware_decoders.xml
 for g in configs/groups/*/agent.conf; do t "groupe $(basename "$(dirname "$g")")" wrap "$g"; done
 t "dashboard Grafana (JSON)" python3 -c "import json; d=json.load(open('configs/grafana/dashboards/wazuh-soc.json')); assert d['panels']"
+t "tableaux de bord Grafana : uid, panneaux, chevauchements, source" python3 tests/check_dashboards.py
+t "poste de commande à jour avec son générateur" bash -c 'cp configs/grafana/dashboards/wazuh-overview.json "$TMP"/ov.json && python3 grafana/build_dashboard.py >/dev/null && cmp -s configs/grafana/dashboards/wazuh-overview.json "$TMP"/ov.json'
+if python3 -c "import reportlab" 2>/dev/null; then
+  t "manuel d'exploitation : génération sans débordement de code" bash -c 'out="$(MANUEL_OUT="$TMP/m.pdf" python3 docs/manuel/build_manuel.py 2>&1)" && ! grep -q "trop longue" <<< "$out" && test -s "$TMP/m.pdf"'
+else echo "  [SKIP] reportlab absent (génération du manuel)"; fi
 t "identifiants de règles uniques, dans 100500-100599, avec description" python3 - "$TMP/malware_rules.xml" <<'PY'
 import sys, xml.etree.ElementTree as ET
 ids = []
