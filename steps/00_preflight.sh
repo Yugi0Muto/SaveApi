@@ -5,6 +5,7 @@
 # Un point bloquant arrête l'étape ; un point « recommandé » non respecté demande confirmation.
 set -euo pipefail
 source "$(cd "$(dirname "${BASH_SOURCE[0]}")/.." && pwd)/lib/common.sh"
+source "$BUNDLE_ROOT/lib/cleanup.sh"
 require_root
 step_header 00 "Préflight"
 
@@ -54,10 +55,15 @@ fi
 if wazuh_installed; then
   ok "Wazuh est déjà installé : contrôle des ports ignoré (ils sont utilisés par Wazuh)."
 else
+  scan="$(trace_scan)"
   for p in 443 1514 1515 9200 55000; do
-    if output_has "[:.]${p}[[:space:]]" ss -tlnH; then ko "Port $p déjà utilisé : $(ss -tlnpH "sport = :$p" | awk '{print $6}' | head -1)"
+    if grep -q "^wazuh|port|$p|" <<< "$scan"; then soft "Port $p occupé par un reste d'installation Wazuh : l'étape 00b le libérera"
+    elif output_has "[:.]${p}[[:space:]]" ss -tlnH; then ko "Port $p déjà utilisé : $(ss -tlnpH "sport = :$p" | awk '{print $6}' | head -1)"
     else ok "Port $p libre"; fi
   done
+  n_traces="$(grep -cE '^(wazuh|system|bundle|firewall|grafana)\|' <<< "$scan" || true)"
+  if (( n_traces > 0 )); then soft "$n_traces trace(s) d'une installation précédente détectée(s) : l'étape 00b les liste et les nettoie"
+  else ok "Aucune trace d'installation précédente"; fi
 fi
 for url in https://packages.wazuh.com https://github.com; do
   if curl -sS -o /dev/null -m 10 -I "$url" 2>/tmp/.pf.err; then ok "Accès HTTPS à $url"

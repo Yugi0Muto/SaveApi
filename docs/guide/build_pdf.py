@@ -485,6 +485,20 @@ step("00", "Préflight", "contrôler la machine (OS, mémoire, disque, ports lib
       ["IP/CIDR des postes d'administration", "—", "Ex. " + c("10.10.10.50/32 10.10.10.51/32") + "."]],
      "message « Préflight OK ». Un point bloquant (ERREUR) arrête l'étape ; un point recommandé (WARN) demande "
      "confirmation.")
+step("00b", "Nettoyage des traces d'une installation précédente", "garantir un serveur vierge avant "
+     "l'installation. L'installateur officiel échoue s'il reste des éléments d'une installation précédente, faite "
+     "avec le bundle ou à la main (ex. « wazuh-keystore : Aucun fichier »), puis annule tout. L'étape dresse un "
+     "inventaire en lecture seule, l'explique, nettoie catégorie par catégorie après confirmation, puis vérifie.",
+     [["Supprimer les composants Wazuh restants ?", "—", "Paquets (même « désinstallés » avec leur configuration), "
+       "données, services orphelins, dépôt APT, comptes système, processus. Obligatoire pour installer."],
+      ["Nettoyer les traces du bundle ?", "—", "Tâches planifiées, outils, secrets et réponses périmés ; les "
+       "mots de passe anciens sont archivés dans /root/.wazuh-bundle/ancienne-installation-…"],
+      ["Retirer le pare-feu de la v2 ?", "—", "Non si l'entreprise compte sur ce pare-feu local."],
+      ["Retirer le provisionnement Grafana ?", "—", "Reprovisionné par l'étape 09."]],
+     "« Serveur prêt pour une installation neuve de Wazuh ». Conservés : réponses, durcissement SSH, "
+     "sauvegardes, journaux. Logiciels tiers en conflit (Elasticsearch, serveur web sur 443…) : signalés, "
+     "jamais supprimés. Une installation Wazuh en service n'est pas touchée (sauf CLEANUP_FORCE=1). L'étape 02 "
+     "lance automatiquement cette étape si elle trouve des traces.")
 step("01", "Durcissement SSH (optionnel)", "réduire le risque sur l'accès d'administration. Sept mesures, "
      "chacune expliquée et proposée séparément, écrites dans " + c("/etc/ssh/sshd_config.d/00-wazuh-bundle.conf") + ".",
      [["Connexion de root", "inchangé", c("no") + " si un compte sudo nominatif fonctionne."],

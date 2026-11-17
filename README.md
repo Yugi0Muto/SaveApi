@@ -107,6 +107,7 @@ python3 grafana/build_dashboard.py
 | Étape | Rôle | Questions principales |
 |---|---|---|
 | 00 Préflight | Contrôles (OS, ressources, ports, Internet, NTP). Ne modifie rien. | IP du serveur, postes d'administration |
+| 00b Nettoyage | Repère et nettoie les restes d'une installation précédente : paquets dans n'importe quel état, dossiers, services orphelins, dépôt, comptes, ports, traces du bundle, pare-feu v2. Les mots de passe anciens sont archivés ; un logiciel tiers n'est jamais supprimé d'office. | confirmation par catégorie |
 | 01 SSH | Durcissement **optionnel**, mesure par mesure (7 mesures expliquées, risques, retour arrière) | oui/non par mesure |
 | 02 Wazuh | Installation officielle (`wazuh-install.sh`), branche 4.14 | adresse d'écoute de l'indexer |
 | 03 Manager | Enrôlement par mot de passe, liste blanche, réponse active, groupes d'agents | IP jamais bloquées, durée de blocage |

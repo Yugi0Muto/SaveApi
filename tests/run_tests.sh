@@ -22,7 +22,7 @@ echo "== 1. Syntaxe et qualité des scripts"
 for f in "${SCRIPTS[@]}"; do t "bash -n $f" bash -n "$f"; done
 t "python : ossec_conf.py, alerteur SMS" python3 -m py_compile lib/ossec_conf.py configs/manager/wazuh-sms-alerter.py
 if command -v shellcheck >/dev/null; then t "shellcheck (niveau warning)" shellcheck -S warning -x "${SCRIPTS[@]}"; else echo "  [SKIP] shellcheck absent"; fi
-t "aucune référence à bundle.conf ni au pare-feu nftables" bash -c '! grep -rnE "(^|[^-])bundle\.conf|load_conf|nft |nftables\.conf|render_nft" install.sh lib steps tools agents grafana'
+t "aucune référence à bundle.conf ni configuration de pare-feu (seul 00b RETIRE celui de la v2)" bash -c '! grep -rnE "(^|[^-])bundle\.conf|load_conf|nft |nftables\.conf|render_nft" install.sh lib steps tools agents grafana --exclude=cleanup.sh --exclude=00b_cleanup.sh'
 t "chaque étape a un en-tête explicatif (install.sh --explain)" bash -c 'for f in steps/*.sh; do [[ "$(sed -n 2p "$f")" == "# "* ]] || { echo "$f"; exit 1; }; done'
 t "les étapes s'arrêtent à la première erreur (set -e)" bash -c 'for f in steps/0*.sh steps/10_*.sh; do grep -q "^set -euo pipefail" "$f" || { echo "$f"; exit 1; }; done'
 t "aucune erreur masquée par >/dev/null sur apt-get" bash -c '! grep -rnE "apt-get[^|]*>/dev/null" steps tools agents'
@@ -159,6 +159,31 @@ t "message du shell signalé et diagnostiqué (reste d'installation)" bash -c 'g
 t "erreur en évidence + annulation signalée + récapitulatif" bash -c 'grep -q "✘ wazuh-manager could not be started" <<< "$WI" && grep -q "↺ L.installateur a annulé" <<< "$WI" && grep -q "1 erreur(s), 1 avertissement(s)" <<< "$WI"'
 t "aucune ligne perdue (chaque message d'origine est affiché)" bash -c 'n=0; while IFS= read -r l; do m="${l#??/??/???? ??:??:?? }"; m="${m#*: }"; [[ "$m" == ---* ]] && continue; grep -qF -- "$m" <<< "$WI" || { echo "absent : $m"; n=1; }; done < tests/fixtures/wazuh-install-echec.txt; exit $n'
 
+echo "== 4e. Étape 00b : inventaire des traces d'une installation précédente (système simulé)"
+FR="$TMP/fakeroot"; mkdir -p "$FR"/var/ossec "$FR"/etc/filebeat "$FR"/etc/apt/sources.list.d "$FR"/etc/ssh/sshd_config.d \
+  "$FR"/etc/wazuh-bundle "$FR"/root/.wazuh-bundle "$FR"/etc/systemd/system "$FR"/etc/cron.d "$FR"/clean/etc
+touch "$FR"/etc/apt/sources.list.d/wazuh.list "$FR"/etc/ssh/sshd_config.d/00-wazuh-bundle.conf \
+  "$FR"/etc/systemd/system/wazuh-indexer.service "$FR"/etc/cron.d/wazuh-bundle-malware "$FR"/root/.wazuh-bundle/wazuh-passwords.txt
+printf 'root:x:0:0::/root:/bin/bash\nwazuh:x:998:998::/var/ossec:/sbin/nologin\nwazuh-sms:x:997:998::/:/sbin/nologin\n' > "$FR"/etc/passwd
+printf 'root:x:0:0::/root:/bin/bash\n' > "$FR"/clean/etc/passwd
+printf 'MANAGER_IP=10.0.0.1\nWAZUH_VERSION=4.14.1-1\n' > "$FR"/etc/wazuh-bundle/answers.env
+printf 'INDEXER_ADMIN_PASSWORD=x\nAUTHD_PASSWORD=y\n' > "$FR"/root/.wazuh-bundle/secrets.env
+printf '# Généré par wazuh-bundle\nflush ruleset\n' > "$FR"/etc/nftables.conf
+printf 'filebeat rc\nwazuh-agent ii\nelasticsearch ii\n' > "$TMP/fake.dpkg"
+printf '9200 java\n443 apache2\n22 sshd\n' > "$TMP/fake.ss"; : > "$TMP/fake.ps"; : > "$TMP/empty"
+SCAN="$(CLEAN_ROOT="$FR" CLEAN_FAKE_DPKG="$TMP/fake.dpkg" CLEAN_FAKE_SS="$TMP/fake.ss" CLEAN_FAKE_PS="$TMP/fake.ps" \
+  BUNDLE_STATE_DIR=/etc/wazuh-bundle BUNDLE_SECRETS_DIR=/root/.wazuh-bundle bash -c 'source lib/common.sh; source lib/cleanup.sh; trace_scan')"
+export SCAN
+t "paquet « désinstallé » mais configuration restante (rc) détecté" bash -c 'grep -q "^wazuh|pkg|filebeat|désinstallé, fichiers de configuration restants" <<< "$SCAN"'
+t "agent installé sur le serveur signalé" bash -c 'grep -q "^wazuh|pkg|wazuh-agent|.*ne doit pas être installé sur le serveur" <<< "$SCAN"'
+t "dossiers, dépôt APT, service orphelin, compte système" bash -c 'grep -q "^wazuh|dir|/var/ossec|" <<< "$SCAN" && grep -q "^wazuh|apt|/etc/apt/sources.list.d/wazuh.list|" <<< "$SCAN" && grep -q "^wazuh|unit|/etc/systemd/system/wazuh-indexer.service|" <<< "$SCAN" && grep -q "^wazuh|user|wazuh|" <<< "$SCAN"'
+t "port pris par Wazuh = trace ; port pris par un tiers = conflit" bash -c 'grep -q "^wazuh|port|9200|" <<< "$SCAN" && grep -q "^conflict|port|443|.*apache2" <<< "$SCAN" && ! grep -q "|22|" <<< "$SCAN"'
+t "logiciel tiers (Elasticsearch) en conflit, jamais classé Wazuh" bash -c 'grep -q "^conflict|pkg|elasticsearch|" <<< "$SCAN"'
+t "traces du bundle : cron, compte SMS, réponse et secret périmés, mots de passe à archiver" bash -c 'grep -q "^bundle|file|/etc/cron.d/wazuh-bundle-malware|" <<< "$SCAN" && grep -q "^bundle|user|wazuh-sms|" <<< "$SCAN" && grep -q "^bundle|answer|WAZUH_VERSION|" <<< "$SCAN" && grep -q "^bundle|secret|INDEXER_ADMIN_PASSWORD|" <<< "$SCAN" && ! grep -q "AUTHD_PASSWORD" <<< "$SCAN" && grep -q "^bundle|archive|.*wazuh-passwords.txt|" <<< "$SCAN"'
+t "pare-feu de la v2 détecté ; durcissement SSH et réponses conservés" bash -c 'grep -q "^firewall|file|/etc/nftables.conf|" <<< "$SCAN" && grep -q "^keep|file|/etc/ssh/sshd_config.d/00-wazuh-bundle.conf|" <<< "$SCAN" && grep -q "^keep|file|/etc/wazuh-bundle/answers.env|" <<< "$SCAN"'
+t "traces bloquantes : oui sur le système sale" bash -c 'CLEAN_ROOT='"$FR"' CLEAN_FAKE_DPKG='"$TMP"'/fake.dpkg CLEAN_FAKE_SS='"$TMP"'/fake.ss CLEAN_FAKE_PS='"$TMP"'/fake.ps bash -c "source lib/common.sh; source lib/cleanup.sh; traces_blocking"'
+t "système propre : aucune trace, rien de bloquant" bash -c 'o="$(CLEAN_ROOT='"$FR"'/clean CLEAN_FAKE_DPKG='"$TMP"'/empty CLEAN_FAKE_SS='"$TMP"'/empty CLEAN_FAKE_PS='"$TMP"'/empty bash -c "source lib/common.sh; source lib/cleanup.sh; trace_scan; traces_blocking && echo BLOQUANT")"; [[ -z "$o" ]]'
+
 echo "== 5. E-mail : paramètres Postfix des 3 modes"
 E() { bash -c 'source lib/email.sh; postfix_settings '"$*"; }
 t "gmail : 587, TLS vérifié, authentification" bash -c 'o="$(bash -c "source lib/email.sh; postfix_settings gmail smtp.gmail.com 587 verify oui")"; grep -qx "relayhost = \[smtp.gmail.com\]:587" <<< "$o" && grep -qx "smtp_tls_security_level = secure" <<< "$o" && grep -qx "smtp_sasl_auth_enable = yes" <<< "$o" && grep -qx "inet_interfaces = loopback-only" <<< "$o"'
@@ -289,7 +314,7 @@ t "test_sms.py" python3 tests/test_sms.py
 
 echo "== 12. install.sh"
 if [[ "${EUID:-$(id -u)}" -eq 0 ]]; then
-  for n in 00 01 02 03 04 05 06 07 08 09 10 99; do t "install.sh --explain $n" bash -c 'bash install.sh --explain '"$n"' | grep -q "Étape '"$n"'"'; done
+  for n in 00 00b 01 02 03 04 05 06 07 08 09 10 99; do t "install.sh --explain $n" bash -c 'bash install.sh --explain '"$n"' | grep -q "Étape '"$n"'"'; done
 else echo "  [SKIP] install.sh --explain (root requis)"; fi
 
 echo; echo "Résultat : $PASS OK, $FAIL échec(s)"; (( FAIL == 0 ))

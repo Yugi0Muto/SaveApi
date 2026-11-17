@@ -11,21 +11,10 @@ require_root
 step_header 02 "Installation de Wazuh"
 need_answer MANAGER_IP 00
 
+source "$BUNDLE_ROOT/lib/cleanup.sh"
 WAZUH_PKGS=(wazuh-manager wazuh-indexer wazuh-dashboard filebeat)
-WAZUH_DIRS=(/var/ossec /etc/filebeat /var/lib/filebeat /usr/share/filebeat /etc/wazuh-indexer /var/lib/wazuh-indexer
-            /usr/share/wazuh-indexer /var/log/wazuh-indexer /etc/wazuh-dashboard /usr/share/wazuh-dashboard
-            /var/lib/wazuh-dashboard)
 wazuh_complete() { local p; for p in "${WAZUH_PKGS[@]}"; do pkg_installed "$p" || return 1; done; }
-# Restes : paquet présent dans n'importe quel état (installé, à moitié, fichiers de config restants) ou dossier
-wazuh_remnants() {
-  local p st d
-  for p in "${WAZUH_PKGS[@]}"; do
-    st="$(dpkg-query -W -f='${db:Status-Abbrev}' "$p" 2>/dev/null || true)"
-    [[ -n "$st" && "$st" != "un "* && "$st" != "pn "* ]] && echo "paquet $p (état dpkg : ${st// /})"
-  done
-  for d in "${WAZUH_DIRS[@]}"; do [[ -e "$d" ]] && echo "dossier $d"; done
-  return 0
-}
+blocking_traces() { trace_scan | grep -E '^(wazuh|conflict|system)\|' | cut -d'|' -f2- | sed 's/|/ : /; s/|/ — /' || true; }
 
 # Lance wazuh-install.sh : sortie rendue lisible par tools/wazuh_install_filter.py (journal brut complet
 # dans /var/log/wazuh-install.log) ; en cas d'échec : extrait du journal, pistes, ARRÊT.
@@ -42,37 +31,12 @@ wazuh_install() {
   echo "  ${RED}✘ ÉCHEC${NC} (code retour $rc) : ${desc}"
   echo "  Dernières lignes du journal détaillé (/var/log/wazuh-install.log) :"
   tail -20 /var/log/wazuh-install.log 2>/dev/null | sed "s/^/  ${DIM}│${NC} /"
-  local left; left="$(wazuh_remnants)"
+  local left; left="$(blocking_traces)"
   if [[ -n "$left" ]]; then
-    echo "  ${YELLOW}Restes encore présents sur le système :${NC}"; sed 's/^/    - /' <<< "$left"
-    echo "  ${YELLOW}Piste :${NC} relancer l'étape 02 : elle propose de nettoyer ces restes avant de réinstaller."
+    echo "  ${YELLOW}Traces encore présentes sur le système :${NC}"; sed 's/^/    - /' <<< "$left"
+    echo "  ${YELLOW}Piste :${NC} lancer l'étape 00b (nettoyage) puis relancer l'étape 02."
   fi
   die "Installation de Wazuh en échec. Lire les lignes « ✘ » et « ? » ci-dessus : elles donnent la cause."
-}
-
-clean_remnants() { # nettoyage complet d'une installation précédente ou partielle (après confirmation)
-  local left="$1"
-  explain <<TXT
-Des éléments d'une installation précédente de Wazuh sont présents :
-$(sed 's/^/  - /' <<< "$left")
-L'installateur officiel ne sait pas installer par-dessus : il échoue (ex. « wazuh-keystore : Aucun
-fichier », « wazuh-manager could not be started ») puis annule tout. Il faut d'abord nettoyer.
-Le nettoyage SUPPRIME les données et la configuration de Wazuh présentes sur CE serveur (alertes,
-certificats, règles). Les réponses et secrets du bundle sont conservés.
-TXT
-  confirm "Nettoyer complètement l'installation précédente de Wazuh sur ce serveur ?" \
-    || die "Installation impossible tant que les restes sont présents (voir la liste ci-dessus)."
-  [[ -f wazuh-install.sh ]] && run --allow-fail "Désinstallation officielle (wazuh-install.sh -u)" bash wazuh-install.sh -u || true
-  local svc; for svc in wazuh-dashboard filebeat wazuh-manager wazuh-indexer; do
-    systemctl list-unit-files "$svc.service" >/dev/null 2>&1 && systemctl stop "$svc" 2>/dev/null || true
-  done
-  local present=() p
-  for p in "${WAZUH_PKGS[@]}"; do [[ -n "$(dpkg-query -W -f='${db:Status-Abbrev}' "$p" 2>/dev/null | grep -v '^[up]n' || true)" ]] && present+=("$p"); done
-  (( ${#present[@]} )) && run "Purge des paquets restants : ${present[*]}" env DEBIAN_FRONTEND=noninteractive apt-get purge -y "${present[@]}"
-  local d; for d in "${WAZUH_DIRS[@]}"; do [[ -e "$d" ]] && run "Suppression de $d" rm -rf -- "$d"; done
-  left="$(wazuh_remnants)"
-  [[ -z "$left" ]] || die "Nettoyage incomplet, restes : $left"
-  log_ok "Système nettoyé : l'installation peut repartir de zéro."
 }
 
 if wazuh_complete; then
@@ -116,8 +80,12 @@ cd "$WORK"
 run --hint "Vérifier l'accès HTTPS à packages.wazuh.com et que la branche $WAZUH_BRANCH existe." \
   "Téléchargement de l'assistant officiel Wazuh $WAZUH_BRANCH" curl -fSL -o wazuh-install.sh "https://packages.wazuh.com/${WAZUH_BRANCH}/wazuh-install.sh"
 run "Empreinte du script téléchargé (à comparer si votre politique l'exige)" sha256sum wazuh-install.sh
-left="$(wazuh_remnants)"
-if [[ -n "$left" ]]; then clean_remnants "$left"; else log_ok "Aucun reste d'installation précédente : système propre."; fi
+# Le serveur doit être vierge de toute installation précédente (sinon l'installateur échoue puis annule tout)
+if [[ -n "$(blocking_traces)" ]]; then
+  log_warn "Des traces d'une installation précédente sont présentes : passage par l'étape 00b (nettoyage)."
+  bash "$BUNDLE_ROOT/steps/00b_cleanup.sh" || die "Nettoyage non terminé : l'installation ne peut pas commencer."
+  cd "$WORK"
+else log_ok "Aucune trace d'installation précédente : système propre."; fi
 confirm "Lancer l'installation de Wazuh maintenant ?" || die "Installation annulée par l'utilisateur (le script reste dans $WORK)."
 
 if [[ "$INDEXER_HOST" == 127.0.0.1 ]]; then
