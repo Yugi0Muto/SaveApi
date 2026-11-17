@@ -61,6 +61,13 @@ install_failure_report() {
        "$diag/wazuh-install-cette-tentative.log" | tail -25 || true)"
   if [[ -n "$f" ]]; then sed "s/^/  ${DIM}│${NC} /" <<< "$f"; else tail -15 "$diag/wazuh-install-cette-tentative.log" | sed "s/^/  ${DIM}│${NC} /"; fi
 
+  if grep -qiE "start operation timed out|result 'timeout'" "$diag/journal-services.log"; then
+    echo "  ${RED}✘ Un service Wazuh a mis trop de temps à démarrer : systemd l'a abandonné (délai dépassé).${NC}"
+    echo "  ${YELLOW}Cause :${NC} ressources insuffisantes ($(free -h | awk '/Mem:/{print $2}') de RAM, $(nproc) CPU) : l'indexer (Java)"
+    echo "          occupe la machine pendant que le manager démarre."
+    echo "  ${YELLOW}Solution :${NC} 8 Go de RAM et 4 CPU recommandés. À défaut, relancer l'étape 02 : le délai de démarrage"
+    echo "          est porté à 15 minutes (vérifier : systemctl show wazuh-manager -p TimeoutStartUSec)."
+  fi
   if grep -qiE 'out of memory|oom-kill|killed process' "$diag/journal-noyau.log"; then
     echo "  ${RED}✘ Le noyau a tué un processus faute de MÉMOIRE (OOM) pendant l'installation.${NC}"
     grep -iE 'out of memory|killed process' "$diag/journal-noyau.log" | tail -3 | sed "s/^/  ${DIM}│${NC} /"
@@ -127,6 +134,26 @@ if [[ -n "$(blocking_traces)" ]]; then
   bash "$BUNDLE_ROOT/steps/00b_cleanup.sh" || die "Nettoyage non terminé : l'installation ne peut pas commencer."
   cd "$WORK"
 else log_ok "Aucune trace d'installation précédente : système propre."; fi
+
+# Délai de démarrage : systemd abandonne un service qui met plus de 90 s à démarrer. Sur un serveur
+# modeste (4 Go / 2 CPU), le premier démarrage du manager dépasse ce délai pendant que l'indexer (Java)
+# occupe la machine : l'installateur conclut à un échec et annule tout. On laisse 15 minutes.
+section "Délai de démarrage des services Wazuh"
+ram_mb=$(awk '/MemTotal/{print int($2/1024)}' /proc/meminfo); cpus=$(nproc)
+log_info "Ressources : ${ram_mb} Mo de RAM, ${cpus} CPU (recommandé : 8 Go, 4 CPU)."
+for u in wazuh-manager wazuh-indexer wazuh-dashboard; do
+  run "Délai de démarrage de $u porté à 15 minutes (surcharge systemd)" install -D -m 644 /dev/stdin \
+    "/etc/systemd/system/$u.service.d/$BUNDLE_DROPIN" <<'UNIT'
+# Ajouté par wazuh-bundle (étape 02) : premier démarrage lent sur un serveur aux ressources limitées.
+[Service]
+TimeoutStartSec=900
+UNIT
+done
+run "Prise en compte par systemd" systemctl daemon-reload
+if (( ram_mb < 7500 || cpus < 4 )); then
+  log_warn "Serveur sous les recommandations : l'installation sera LENTE (prévoir 30 à 45 min) et l'exploitation limitée."
+  log_warn "Pour la production : 8 Go de RAM et 4 CPU (augmenter la machine virtuelle si possible)."
+fi
 confirm "Lancer l'installation de Wazuh maintenant ?" || die "Installation annulée par l'utilisateur (le script reste dans $WORK)."
 
 if [[ "$INDEXER_HOST" == 127.0.0.1 ]]; then

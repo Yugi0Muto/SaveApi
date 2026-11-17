@@ -184,6 +184,13 @@ t "pare-feu de la v2 détecté ; durcissement SSH et réponses conservés" bash 
 t "traces bloquantes : oui sur le système sale" bash -c 'CLEAN_ROOT='"$FR"' CLEAN_FAKE_DPKG='"$TMP"'/fake.dpkg CLEAN_FAKE_SS='"$TMP"'/fake.ss CLEAN_FAKE_PS='"$TMP"'/fake.ps bash -c "source lib/common.sh; source lib/cleanup.sh; traces_blocking"'
 t "système propre : aucune trace, rien de bloquant" bash -c 'o="$(CLEAN_ROOT='"$FR"'/clean CLEAN_FAKE_DPKG='"$TMP"'/empty CLEAN_FAKE_SS='"$TMP"'/empty CLEAN_FAKE_PS='"$TMP"'/empty bash -c "source lib/common.sh; source lib/cleanup.sh; trace_scan; traces_blocking && echo BLOQUANT")"; [[ -z "$o" ]]'
 
+t "surcharge systemd du bundle (délai de démarrage) conservée, surcharge étrangère = trace" bash -c '
+  R="$TMP/dropin"; mkdir -p "$R/etc/systemd/system/wazuh-manager.service.d"; printf "root:x:0:0::/:/bin/sh\n" > "$R/etc/passwd"
+  touch "$R/etc/systemd/system/wazuh-manager.service.d/wazuh-bundle-timeout.conf" "$R/etc/systemd/system/wazuh-manager.service.d/old.conf"
+  o="$(CLEAN_ROOT="$R" CLEAN_FAKE_DPKG="$TMP/empty" CLEAN_FAKE_SS="$TMP/empty" CLEAN_FAKE_PS="$TMP/empty" bash -c "source lib/common.sh; source lib/cleanup.sh; trace_scan")"
+  grep -q "^keep|file|.*wazuh-bundle-timeout.conf|" <<< "$o" && grep -q "^wazuh|unit|.*old.conf|" <<< "$o"'
+t "filtre : délai de démarrage dépassé expliqué (ressources)" bash -c 'printf "17/11/2026 12:09:20 ERROR: wazuh-manager.service: Failed with result '"'"'timeout'"'"'\n" | BUNDLE_COLOR=0 python3 tools/wazuh_install_filter.py | grep -q "Démarrage trop lent"'
+
 echo "== 5. E-mail : paramètres Postfix des 3 modes"
 E() { bash -c 'source lib/email.sh; postfix_settings '"$*"; }
 t "gmail : 587, TLS vérifié, authentification" bash -c 'o="$(bash -c "source lib/email.sh; postfix_settings gmail smtp.gmail.com 587 verify oui")"; grep -qx "relayhost = \[smtp.gmail.com\]:587" <<< "$o" && grep -qx "smtp_tls_security_level = secure" <<< "$o" && grep -qx "smtp_sasl_auth_enable = yes" <<< "$o" && grep -qx "inet_interfaces = loopback-only" <<< "$o"'

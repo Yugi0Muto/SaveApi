@@ -38,9 +38,9 @@ command -v curl >/dev/null && ok "curl présent" || ko "curl manquant : apt-get 
 section "Ressources (recommandations Wazuh pour un serveur tout-en-un)"
 ram_mb=$(awk '/MemTotal/{print int($2/1024)}' /proc/meminfo)
 if (( ram_mb < 3800 )); then ko "RAM ${ram_mb} Mo : insuffisant (4 Go minimum, 8 Go recommandés)"
-elif (( ram_mb < 7500 )); then soft "RAM ${ram_mb} Mo (< 8 Go recommandés en production)"
+elif (( ram_mb < 7500 )); then soft "RAM ${ram_mb} Mo (< 8 Go recommandés) : démarrages lents, installation de 30 à 45 min ; le bundle allonge le délai de démarrage des services, mais 8 Go sont nécessaires en production"
 else ok "RAM : ${ram_mb} Mo"; fi
-cpus=$(nproc); (( cpus >= 4 )) && ok "CPU : $cpus" || soft "CPU : $cpus (< 4 recommandés)"
+cpus=$(nproc); (( cpus >= 4 )) && ok "CPU : $cpus" || soft "CPU : $cpus (< 4 recommandés) : manager et indexer se disputent le processeur au démarrage"
 disk_gb=$(df -BG --output=avail /var | tail -1 | tr -dc '0-9')
 if (( disk_gb < 30 )); then ko "Disque /var : ${disk_gb} Go libres (30 Go minimum)"
 elif (( disk_gb < 100 )); then soft "Disque /var : ${disk_gb} Go libres (< 100 Go recommandés ; dépend de la rétention, étape 05)"

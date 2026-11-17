@@ -46,6 +46,9 @@ ERRORS = [
     (r"wazuh-keystore.*(No such file|Aucun fichier)",
      "Le manager Wazuh n'est pas installé alors que Filebeat l'est : reste d'une installation précédente. "
      "Nettoyer l'installation (l'étape 02 le propose) puis relancer."),
+    (r"start operation timed out|result 'timeout'|Timeout",
+     "Démarrage trop lent : systemd a abandonné le service. Cause habituelle : RAM ou CPU insuffisants "
+     "(8 Go et 4 CPU recommandés)."),
     (r"wazuh-manager could not be started",
      "Le manager n'a pas démarré. Si la ligne « wazuh-keystore … Aucun fichier » apparaît juste avant, c'est "
      "un reste d'installation précédente ; sinon : journalctl -u wazuh-manager -n 50."),

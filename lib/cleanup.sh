@@ -32,6 +32,7 @@ BUNDLE_TOOLS=(/usr/local/sbin/wazuh-bundle-update-malware /usr/local/sbin/wazuh-
 # Réponses et secrets propres à l'installation précédente (les autres réponses sont des préférences : conservées)
 STALE_ANSWERS=(WAZUH_VERSION INDEXER_HOST)
 STALE_SECRETS=(INDEXER_ADMIN_PASSWORD GRAFANA_RO_PASSWORD)
+BUNDLE_DROPIN="wazuh-bundle-timeout.conf"
 
 _r() { printf '%s%s' "$CLEAN_ROOT" "$1"; }
 _pkg_state() { # état dpkg abrégé (ii, rc, iU…) ou vide si absent
@@ -63,9 +64,18 @@ trace_scan() {
   done
   for d in "${WZ_DIRS[@]}"; do [[ -e "$(_r "$d")" ]] && echo "wazuh|dir|$d|dossier restant"; done
   for u in "${WZ_UNITS[@]}"; do
-    for f in "/etc/systemd/system/$u.service" "/etc/systemd/system/$u.service.d" "/lib/systemd/system/$u.service" "/usr/lib/systemd/system/$u.service"; do
+    for f in "/etc/systemd/system/$u.service" "/lib/systemd/system/$u.service" "/usr/lib/systemd/system/$u.service"; do
       [[ -e "$(_r "$f")" ]] && [[ -z "$(_pkg_state "$u")" ]] && echo "wazuh|unit|$f|service systemd orphelin (paquet absent)"
     done
+    # surcharges systemd : celle du bundle (délai de démarrage) est conservée, les autres sont des restes
+    f="/etc/systemd/system/$u.service.d"
+    if [[ -d "$(_r "$f")" ]]; then
+      for k in "$(_r "$f")"/*; do
+        [[ -e "$k" ]] || continue
+        if [[ "$(basename "$k")" == "$BUNDLE_DROPIN" ]]; then echo "keep|file|$f/$BUNDLE_DROPIN|délai de démarrage allongé par le bundle (serveur aux ressources limitées)"
+        elif [[ -z "$(_pkg_state "$u")" ]]; then echo "wazuh|unit|$f/$(basename "$k")|surcharge systemd d'une ancienne installation"; fi
+      done
+    fi
   done
   for f in "${WZ_APT[@]}"; do [[ -e "$(_r "$f")" ]] && echo "wazuh|apt|$f|dépôt ou clé APT d'une ancienne installation (l'installateur le recrée)"; done
   for u in "${WZ_USERS[@]}"; do
