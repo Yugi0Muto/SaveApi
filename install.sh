@@ -18,7 +18,6 @@ STEPS_DIR="$SCRIPT_DIR/steps"
 
 declare -A LABEL=(
  [00]="Préflight : questions de base et contrôles (ne modifie rien)"
- [00b]="Nettoyage : traces d'une installation précédente (Wazuh ou bundle)"
  [01]="Durcissement SSH (optionnel, mesure par mesure)"
  [02]="Installation de Wazuh (manager, indexer, dashboard)"
  [03]="Configuration du manager (enrôlement, liste blanche, réponse active, groupes)"
@@ -30,7 +29,7 @@ declare -A LABEL=(
  [09]="Grafana (local ou distant)"
  [10]="Sauvegarde quotidienne de la configuration"
  [99]="Recette automatique (vérification complète)" )
-ORDER=(00 00b 01 02 03 04 05 06 07 08 09 10 99)
+ORDER=(00 01 02 03 04 05 06 07 08 09 10 99)
 
 step_file() { local f; f="$(ls "$STEPS_DIR/${1}_"*.sh 2>/dev/null | head -1)"; [[ -n "$f" ]] || die "Étape $1 inconnue."; echo "$f"; }
 

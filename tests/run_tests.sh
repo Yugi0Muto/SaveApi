@@ -22,7 +22,7 @@ echo "== 1. Syntaxe et qualité des scripts"
 for f in "${SCRIPTS[@]}"; do t "bash -n $f" bash -n "$f"; done
 t "python : ossec_conf.py, alerteur SMS" python3 -m py_compile lib/ossec_conf.py configs/manager/wazuh-sms-alerter.py
 if command -v shellcheck >/dev/null; then t "shellcheck (niveau warning)" shellcheck -S warning -x "${SCRIPTS[@]}"; else echo "  [SKIP] shellcheck absent"; fi
-t "aucune référence à bundle.conf ni configuration de pare-feu (seul 00b RETIRE celui de la v2)" bash -c '! grep -rnE "(^|[^-])bundle\.conf|load_conf|nft |nftables\.conf|render_nft" install.sh lib steps tools agents grafana --exclude=cleanup.sh --exclude=00b_cleanup.sh'
+t "aucune référence à bundle.conf ni au pare-feu nftables" bash -c '! grep -rnE "(^|[^-])bundle\.conf|load_conf|nft |nftables\.conf|render_nft" install.sh lib steps tools agents grafana'
 t "chaque étape a un en-tête explicatif (install.sh --explain)" bash -c 'for f in steps/*.sh; do [[ "$(sed -n 2p "$f")" == "# "* ]] || { echo "$f"; exit 1; }; done'
 t "les étapes s'arrêtent à la première erreur (set -e)" bash -c 'for f in steps/0*.sh steps/10_*.sh; do grep -q "^set -euo pipefail" "$f" || { echo "$f"; exit 1; }; done'
 t "aucune erreur masquée par >/dev/null sur apt-get" bash -c '! grep -rnE "apt-get[^|]*>/dev/null" steps tools agents'
@@ -150,60 +150,6 @@ export -f ISM
 t "aucun index (archivage non activé) : pas d'erreur, rien rattaché" bash -c 'o="$(ISM vide)"; grep -q "Aucun index wazuh-archives-\*" <<< "$o" && grep -q FIN <<< "$o" && ! grep -q "_ism/add" <<< "$o"'
 t "« no documents to get » sur change_policy : pas une erreur" bash -c 'o="$(ISM nodoc)"; grep -q "ce n.est pas une erreur" <<< "$o" && grep -q FIN <<< "$o"'
 t "autre erreur sur change_policy : arrêt" bash -c 'o="$(ISM autre)"; ! grep -q FIN <<< "$o" && grep -q "impossible" <<< "$o"'
-
-echo "== 4d. Sortie de l'installateur Wazuh rendue lisible"
-WI="$(BUNDLE_COLOR=0 python3 tools/wazuh_install_filter.py < tests/fixtures/wazuh-install-echec.txt)"; export WI
-t "phases traduites et numérotées" bash -c 'grep -q "▶ Phase 1 : Prérequis" <<< "$WI"'
-t "avertissement « système hors liste » expliqué" bash -c 'grep -q "avertissement sans conséquence" <<< "$WI"'
-t "message du shell signalé et diagnostiqué (reste d'installation)" bash -c 'grep -q "? wazuh-install.sh: ligne 4712" <<< "$WI" && grep -q "reste d.une installation précédente" <<< "$WI"'
-t "erreur en évidence + annulation signalée + récapitulatif" bash -c 'grep -q "✘ wazuh-manager could not be started" <<< "$WI" && grep -q "↺ L.installateur a annulé" <<< "$WI" && grep -q "1 erreur(s), 1 avertissement(s)" <<< "$WI"'
-t "aucune ligne perdue (chaque message d'origine est affiché)" bash -c 'n=0; while IFS= read -r l; do m="${l#??/??/???? ??:??:?? }"; m="${m#*: }"; [[ "$m" == ---* ]] && continue; grep -qF -- "$m" <<< "$WI" || { echo "absent : $m"; n=1; }; done < tests/fixtures/wazuh-install-echec.txt; exit $n'
-
-echo "== 4e. Étape 00b : inventaire des traces d'une installation précédente (système simulé)"
-FR="$TMP/fakeroot"; mkdir -p "$FR"/var/ossec "$FR"/etc/filebeat "$FR"/etc/apt/sources.list.d "$FR"/etc/ssh/sshd_config.d \
-  "$FR"/etc/wazuh-bundle "$FR"/root/.wazuh-bundle "$FR"/etc/systemd/system "$FR"/etc/cron.d "$FR"/clean/etc
-touch "$FR"/etc/apt/sources.list.d/wazuh.list "$FR"/etc/ssh/sshd_config.d/00-wazuh-bundle.conf \
-  "$FR"/etc/systemd/system/wazuh-indexer.service "$FR"/etc/cron.d/wazuh-bundle-malware "$FR"/root/.wazuh-bundle/wazuh-passwords.txt
-printf 'root:x:0:0::/root:/bin/bash\nwazuh:x:998:998::/var/ossec:/sbin/nologin\nwazuh-sms:x:997:998::/:/sbin/nologin\n' > "$FR"/etc/passwd
-printf 'root:x:0:0::/root:/bin/bash\n' > "$FR"/clean/etc/passwd
-printf 'MANAGER_IP=10.0.0.1\nWAZUH_VERSION=4.14.1-1\n' > "$FR"/etc/wazuh-bundle/answers.env
-printf 'INDEXER_ADMIN_PASSWORD=x\nAUTHD_PASSWORD=y\n' > "$FR"/root/.wazuh-bundle/secrets.env
-printf '# Généré par wazuh-bundle\nflush ruleset\n' > "$FR"/etc/nftables.conf
-printf 'filebeat rc\nwazuh-agent ii\nelasticsearch ii\n' > "$TMP/fake.dpkg"
-printf '9200 java\n443 apache2\n22 sshd\n' > "$TMP/fake.ss"; : > "$TMP/fake.ps"; : > "$TMP/empty"
-SCAN="$(CLEAN_ROOT="$FR" CLEAN_FAKE_DPKG="$TMP/fake.dpkg" CLEAN_FAKE_SS="$TMP/fake.ss" CLEAN_FAKE_PS="$TMP/fake.ps" \
-  BUNDLE_STATE_DIR=/etc/wazuh-bundle BUNDLE_SECRETS_DIR=/root/.wazuh-bundle bash -c 'source lib/common.sh; source lib/cleanup.sh; trace_scan')"
-export SCAN
-t "paquet « désinstallé » mais configuration restante (rc) détecté" bash -c 'grep -q "^wazuh|pkg|filebeat|désinstallé, fichiers de configuration restants" <<< "$SCAN"'
-t "agent installé sur le serveur signalé" bash -c 'grep -q "^wazuh|pkg|wazuh-agent|.*ne doit pas être installé sur le serveur" <<< "$SCAN"'
-t "dossiers, dépôt APT, service orphelin, compte système" bash -c 'grep -q "^wazuh|dir|/var/ossec|" <<< "$SCAN" && grep -q "^wazuh|apt|/etc/apt/sources.list.d/wazuh.list|" <<< "$SCAN" && grep -q "^wazuh|unit|/etc/systemd/system/wazuh-indexer.service|" <<< "$SCAN" && grep -q "^wazuh|user|wazuh|" <<< "$SCAN"'
-t "port pris par Wazuh = trace ; port pris par un tiers = conflit" bash -c 'grep -q "^wazuh|port|9200|" <<< "$SCAN" && grep -q "^conflict|port|443|.*apache2" <<< "$SCAN" && ! grep -q "|22|" <<< "$SCAN"'
-t "logiciel tiers (Elasticsearch) en conflit, jamais classé Wazuh" bash -c 'grep -q "^conflict|pkg|elasticsearch|" <<< "$SCAN"'
-t "traces du bundle : cron, compte SMS, réponse et secret périmés, mots de passe à archiver" bash -c 'grep -q "^bundle|file|/etc/cron.d/wazuh-bundle-malware|" <<< "$SCAN" && grep -q "^bundle|user|wazuh-sms|" <<< "$SCAN" && grep -q "^bundle|answer|WAZUH_VERSION|" <<< "$SCAN" && grep -q "^bundle|secret|INDEXER_ADMIN_PASSWORD|" <<< "$SCAN" && ! grep -q "AUTHD_PASSWORD" <<< "$SCAN" && grep -q "^bundle|archive|.*wazuh-passwords.txt|" <<< "$SCAN"'
-t "pare-feu de la v2 détecté ; durcissement SSH et réponses conservés" bash -c 'grep -q "^firewall|file|/etc/nftables.conf|" <<< "$SCAN" && grep -q "^keep|file|/etc/ssh/sshd_config.d/00-wazuh-bundle.conf|" <<< "$SCAN" && grep -q "^keep|file|/etc/wazuh-bundle/answers.env|" <<< "$SCAN"'
-t "traces bloquantes : oui sur le système sale" bash -c 'CLEAN_ROOT='"$FR"' CLEAN_FAKE_DPKG='"$TMP"'/fake.dpkg CLEAN_FAKE_SS='"$TMP"'/fake.ss CLEAN_FAKE_PS='"$TMP"'/fake.ps bash -c "source lib/common.sh; source lib/cleanup.sh; traces_blocking"'
-t "système propre : aucune trace, rien de bloquant" bash -c 'o="$(CLEAN_ROOT='"$FR"'/clean CLEAN_FAKE_DPKG='"$TMP"'/empty CLEAN_FAKE_SS='"$TMP"'/empty CLEAN_FAKE_PS='"$TMP"'/empty bash -c "source lib/common.sh; source lib/cleanup.sh; trace_scan; traces_blocking && echo BLOQUANT")"; [[ -z "$o" ]]'
-
-t "surcharge systemd du bundle (délai de démarrage) conservée, surcharge étrangère = trace" bash -c '
-  R="$TMP/dropin"; mkdir -p "$R/etc/systemd/system/wazuh-manager.service.d"; printf "root:x:0:0::/:/bin/sh\n" > "$R/etc/passwd"
-  touch "$R/etc/systemd/system/wazuh-manager.service.d/wazuh-bundle-timeout.conf" "$R/etc/systemd/system/wazuh-manager.service.d/old.conf"
-  o="$(CLEAN_ROOT="$R" CLEAN_FAKE_DPKG="$TMP/empty" CLEAN_FAKE_SS="$TMP/empty" CLEAN_FAKE_PS="$TMP/empty" bash -c "source lib/common.sh; source lib/cleanup.sh; trace_scan")"
-  grep -q "^keep|file|.*wazuh-bundle-timeout.conf|" <<< "$o" && grep -q "^wazuh|unit|.*old.conf|" <<< "$o"'
-t "filtre : délai de démarrage dépassé expliqué (ressources)" bash -c 'printf "17/11/2026 12:09:20 ERROR: wazuh-manager.service: Failed with result '"'"'timeout'"'"'\n" | BUNDLE_COLOR=0 python3 tools/wazuh_install_filter.py | grep -q "Démarrage trop lent"'
-
-echo "== 4f. Indexer ouvert sur l'IP (Grafana distant) : réémission du certificat"
-if command -v openssl >/dev/null; then
-  P="$TMP/pki"; mkdir -p "$P"
-  openssl req -x509 -new -nodes -newkey rsa:2048 -keyout "$P/root-ca.key" -out "$P/root-ca.pem" -days 5 -subj "/O=Wazuh/CN=root-ca" 2>/dev/null
-  openssl req -new -nodes -newkey rsa:2048 -keyout "$P/indexer-key.pem" -out "$P/n.csr" -subj "/C=US/L=California/O=Wazuh/OU=Wazuh/CN=node-1" 2>/dev/null
-  printf "[v]\nsubjectAltName=IP:127.0.0.1\n" > "$P/e.cnf"
-  openssl x509 -req -in "$P/n.csr" -CA "$P/root-ca.pem" -CAkey "$P/root-ca.key" -CAcreateserial -out "$P/indexer.pem" -days 5 -extfile "$P/e.cnf" -extensions v 2>/dev/null
-  t "certificat réémis, signé par la même autorité" bash -c 'source lib/indexer_expose.sh; reissue_indexer_cert '"$P"'/indexer.pem '"$P"'/indexer-key.pem '"$P"'/root-ca.pem '"$P"'/root-ca.key 192.168.1.50 '"$P"'/new.pem && openssl verify -CAfile '"$P"'/root-ca.pem '"$P"'/new.pem'
-  t "valide pour l'IP du serveur ET pour 127.0.0.1" bash -c 'openssl verify -CAfile '"$P"'/root-ca.pem -verify_ip 192.168.1.50 '"$P"'/new.pem && openssl verify -CAfile '"$P"'/root-ca.pem -verify_ip 127.0.0.1 '"$P"'/new.pem'
-  t "même identité (sujet) et même clé : le module de sécurité reconnaît le nœud" bash -c '[[ "$(openssl x509 -in '"$P"'/new.pem -noout -subject)" == "$(openssl x509 -in '"$P"'/indexer.pem -noout -subject)" && "$(openssl x509 -in '"$P"'/new.pem -noout -pubkey)" == "$(openssl pkey -in '"$P"'/indexer-key.pem -pubout)" ]]'
-  t "autorité incorrecte : refus explicite" bash -c 'openssl req -x509 -new -nodes -newkey rsa:2048 -keyout '"$P"'/o.key -out '"$P"'/o.pem -days 5 -subj "/CN=autre" 2>/dev/null; source lib/indexer_expose.sh; ! reissue_indexer_cert '"$P"'/indexer.pem '"$P"'/indexer-key.pem '"$P"'/root-ca.pem '"$P"'/o.key 192.168.1.50 '"$P"'/bad.pem 2>/dev/null'
-else echo "  [SKIP] openssl absent"; fi
-t "étape 02 : plus de procédure « en plusieurs commandes »" bash -c '! grep -qE "^[^#]*(--wazuh-server|--start-cluster|--generate-config-files)" steps/02_wazuh_install.sh'
 
 echo "== 5. E-mail : paramètres Postfix des 3 modes"
 E() { bash -c 'source lib/email.sh; postfix_settings '"$*"; }
@@ -335,7 +281,7 @@ t "test_sms.py" python3 tests/test_sms.py
 
 echo "== 12. install.sh"
 if [[ "${EUID:-$(id -u)}" -eq 0 ]]; then
-  for n in 00 00b 01 02 03 04 05 06 07 08 09 10 99; do t "install.sh --explain $n" bash -c 'bash install.sh --explain '"$n"' | grep -q "Étape '"$n"'"'; done
+  for n in 00 01 02 03 04 05 06 07 08 09 10 99; do t "install.sh --explain $n" bash -c 'bash install.sh --explain '"$n"' | grep -q "Étape '"$n"'"'; done
 else echo "  [SKIP] install.sh --explain (root requis)"; fi
 
 echo; echo "Résultat : $PASS OK, $FAIL échec(s)"; (( FAIL == 0 ))

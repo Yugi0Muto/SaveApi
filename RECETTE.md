@@ -6,7 +6,6 @@ automatiquement l'essentiel côté serveur. Ce plan couvre en plus ce qui ne se 
 | # | Test | Commande / action | Résultat attendu |
 |---|---|---|---|
 | 1 | Préflight | `bash install.sh --step 00` | « Préflight OK » |
-| 1b | Serveur vierge | `bash install.sh --step 00b` | « Serveur prêt pour une installation neuve » |
 | 2 | Recette serveur | `bash install.sh --step 99` | 0 échec |
 | 3 | SSH (si étape 01 appliquée) | Nouvelle session SSH avec le compte admin + `sudo -v` | Connexion et sudo OK |
 | 4 | Flux admin | Ouvrir `https://IP` depuis un poste ADMIN | Page de connexion |

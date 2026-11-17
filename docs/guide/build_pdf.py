@@ -485,20 +485,6 @@ step("00", "Préflight", "contrôler la machine (OS, mémoire, disque, ports lib
       ["IP/CIDR des postes d'administration", "—", "Ex. " + c("10.10.10.50/32 10.10.10.51/32") + "."]],
      "message « Préflight OK ». Un point bloquant (ERREUR) arrête l'étape ; un point recommandé (WARN) demande "
      "confirmation.")
-step("00b", "Nettoyage des traces d'une installation précédente", "garantir un serveur vierge avant "
-     "l'installation. L'installateur officiel échoue s'il reste des éléments d'une installation précédente, faite "
-     "avec le bundle ou à la main (ex. « wazuh-keystore : Aucun fichier »), puis annule tout. L'étape dresse un "
-     "inventaire en lecture seule, l'explique, nettoie catégorie par catégorie après confirmation, puis vérifie.",
-     [["Supprimer les composants Wazuh restants ?", "—", "Paquets (même « désinstallés » avec leur configuration), "
-       "données, services orphelins, dépôt APT, comptes système, processus. Obligatoire pour installer."],
-      ["Nettoyer les traces du bundle ?", "—", "Tâches planifiées, outils, secrets et réponses périmés ; les "
-       "mots de passe anciens sont archivés dans /root/.wazuh-bundle/ancienne-installation-…"],
-      ["Retirer le pare-feu de la v2 ?", "—", "Non si l'entreprise compte sur ce pare-feu local."],
-      ["Retirer le provisionnement Grafana ?", "—", "Reprovisionné par l'étape 09."]],
-     "« Serveur prêt pour une installation neuve de Wazuh ». Conservés : réponses, durcissement SSH, "
-     "sauvegardes, journaux. Logiciels tiers en conflit (Elasticsearch, serveur web sur 443…) : signalés, "
-     "jamais supprimés. Une installation Wazuh en service n'est pas touchée (sauf CLEANUP_FORCE=1). L'étape 02 "
-     "lance automatiquement cette étape si elle trouve des traces.")
 step("01", "Durcissement SSH (optionnel)", "réduire le risque sur l'accès d'administration. Sept mesures, "
      "chacune expliquée et proposée séparément, écrites dans " + c("/etc/ssh/sshd_config.d/00-wazuh-bundle.conf") + ".",
      [["Connexion de root", "inchangé", c("no") + " si un compte sudo nominatif fonctionne."],
@@ -513,9 +499,8 @@ step("01", "Durcissement SSH (optionnel)", "réduire le risque sur l'accès d'ad
      "relancer l'étape et choisir « supprimer ».")
 step("02", "Installation de Wazuh", "installer manager, indexer et dashboard avec l'assistant officiel " + c("wazuh-install.sh") + " (branche 4.14), puis ranger les mots de passe générés.",
      [["Branche de Wazuh", "4.14", "Rester sur la branche validée."],
-      ["Grafana sera-t-il sur une autre machine ?", "non", "Oui : après l'installation tout-en-un, l'indexer est "
-       "ouvert sur l'IP du serveur (certificat réémis par la même autorité, test HTTPS, retour arrière "
-       "automatique en cas d'échec)."]],
+      ["Adresse d'écoute de l'indexer", "local (127.0.0.1)", "« réseau » uniquement pour un Grafana installé sur "
+                                                           "une autre machine."]],
      "services " + c("wazuh-manager") + ", " + c("wazuh-indexer") + ", " + c("wazuh-dashboard") + " actifs ; "
      "connexion à l'indexer réussie ; dashboard accessible en " + c("https://IP-du-serveur") + " (utilisateur " + c("admin") + ", mot de passe dans " + c("/root/.wazuh-bundle/wazuh-passwords.txt") + "). Copier ce fichier "
      "dans le coffre-fort de l'entreprise.")
@@ -581,7 +566,7 @@ step("09", "Grafana (optionnel)", "écran de supervision « Wazuh — Vue SOC »
      "utilisateur en <b>lecture seule</b> (" + c("grafana_ro") + ").",
      [["Mettre en place Grafana ?", "non", "Le Wazuh Dashboard suffit pour l'analyse."],
       ["Emplacement", "local", "« remote » : génère un kit à installer sur la machine Grafana existante "
-                               "(l'étape propose d'ouvrir l'indexer sur l'IP si ce n'est pas déjà fait)."]],
+                               "(exige l'indexer en mode « réseau » à l'étape 02)."]],
      "local : " + c("http://IP:3000") + " ; distant : le kit termine par « Indexer joignable ».")
 step("10", "Sauvegarde de la configuration", "archiver chaque nuit la configuration (Wazuh, certificats, réponses "
      "et secrets du bundle, Postfix, SSH, Grafana) pour pouvoir reconstruire le serveur.",

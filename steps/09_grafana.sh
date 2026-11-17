@@ -29,15 +29,15 @@ if [[ "$GRAFANA_MODE" == remote ]]; then
   ask GRAFANA_REMOTE_IPS "IP de la machine Grafana (pour le tableau des flux réseau)" "" v_ip_list_req
   if [[ "$(ans_get INDEXER_HOST)" == 127.0.0.1 ]]; then
     explain <<TXT
-L'indexer de ce serveur n'écoute que sur 127.0.0.1 : la machine Grafana ne peut pas s'y connecter.
-Le bundle peut l'ouvrir sur ${MANAGER_IP} : nouveau certificat (même autorité, adresse ajoutée),
-écoute sur 127.0.0.1 et ${MANAGER_IP}, test HTTPS ; retour automatique à l'état d'origine en cas d'échec.
+L'indexer de ce serveur n'écoute que sur 127.0.0.1 (choix « local » de l'étape 02) : une autre machine
+ne peut pas s'y connecter, et son certificat ne contient pas l'adresse ${MANAGER_IP}.
+Solutions :
+  1. installer Grafana sur ce serveur (relancer l'étape 09 et choisir « local ») ;
+  2. ou reconfigurer l'indexer : network.host: "${MANAGER_IP}" dans /etc/wazuh-indexer/opensearch.yml
+     ET régénérer ses certificats avec cette adresse (procédure Wazuh « Certificates creation »),
+     puis relancer l'étape 02 (détection) et l'étape 09.
 TXT
-    confirm "Ouvrir l'indexer sur ${MANAGER_IP}:9200 pour la machine Grafana ?" \
-      || die "Grafana distant impossible tant que l'indexer n'écoute que sur 127.0.0.1 (ou choisir Grafana « local »)."
-    source "$BUNDLE_ROOT/lib/indexer_expose.sh"
-    expose_indexer "$MANAGER_IP"
-    ans_set INDEXER_HOST "$MANAGER_IP"; ans_set INDEXER_HOST_MODE reseau
+    die "Grafana distant impossible tant que l'indexer n'écoute que sur 127.0.0.1."
   fi
 fi
 

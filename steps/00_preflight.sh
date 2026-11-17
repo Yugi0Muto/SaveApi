@@ -5,7 +5,6 @@
 # Un point bloquant arrête l'étape ; un point « recommandé » non respecté demande confirmation.
 set -euo pipefail
 source "$(cd "$(dirname "${BASH_SOURCE[0]}")/.." && pwd)/lib/common.sh"
-source "$BUNDLE_ROOT/lib/cleanup.sh"
 require_root
 step_header 00 "Préflight"
 
@@ -38,9 +37,9 @@ command -v curl >/dev/null && ok "curl présent" || ko "curl manquant : apt-get 
 section "Ressources (recommandations Wazuh pour un serveur tout-en-un)"
 ram_mb=$(awk '/MemTotal/{print int($2/1024)}' /proc/meminfo)
 if (( ram_mb < 3800 )); then ko "RAM ${ram_mb} Mo : insuffisant (4 Go minimum, 8 Go recommandés)"
-elif (( ram_mb < 7500 )); then soft "RAM ${ram_mb} Mo (< 8 Go recommandés) : démarrages lents, installation de 30 à 45 min ; le bundle allonge le délai de démarrage des services, mais 8 Go sont nécessaires en production"
+elif (( ram_mb < 7500 )); then soft "RAM ${ram_mb} Mo (< 8 Go recommandés en production)"
 else ok "RAM : ${ram_mb} Mo"; fi
-cpus=$(nproc); (( cpus >= 4 )) && ok "CPU : $cpus" || soft "CPU : $cpus (< 4 recommandés) : manager et indexer se disputent le processeur au démarrage"
+cpus=$(nproc); (( cpus >= 4 )) && ok "CPU : $cpus" || soft "CPU : $cpus (< 4 recommandés)"
 disk_gb=$(df -BG --output=avail /var | tail -1 | tr -dc '0-9')
 if (( disk_gb < 30 )); then ko "Disque /var : ${disk_gb} Go libres (30 Go minimum)"
 elif (( disk_gb < 100 )); then soft "Disque /var : ${disk_gb} Go libres (< 100 Go recommandés ; dépend de la rétention, étape 05)"
@@ -55,15 +54,10 @@ fi
 if wazuh_installed; then
   ok "Wazuh est déjà installé : contrôle des ports ignoré (ils sont utilisés par Wazuh)."
 else
-  scan="$(trace_scan)"
   for p in 443 1514 1515 9200 55000; do
-    if grep -q "^wazuh|port|$p|" <<< "$scan"; then soft "Port $p occupé par un reste d'installation Wazuh : l'étape 00b le libérera"
-    elif output_has "[:.]${p}[[:space:]]" ss -tlnH; then ko "Port $p déjà utilisé : $(ss -tlnpH "sport = :$p" | awk '{print $6}' | head -1)"
+    if output_has "[:.]${p}[[:space:]]" ss -tlnH; then ko "Port $p déjà utilisé : $(ss -tlnpH "sport = :$p" | awk '{print $6}' | head -1)"
     else ok "Port $p libre"; fi
   done
-  n_traces="$(grep -cE '^(wazuh|system|bundle|firewall|grafana)\|' <<< "$scan" || true)"
-  if (( n_traces > 0 )); then soft "$n_traces trace(s) d'une installation précédente détectée(s) : l'étape 00b les liste et les nettoie"
-  else ok "Aucune trace d'installation précédente"; fi
 fi
 for url in https://packages.wazuh.com https://github.com; do
   if curl -sS -o /dev/null -m 10 -I "$url" 2>/tmp/.pf.err; then ok "Accès HTTPS à $url"
