@@ -83,7 +83,7 @@ fi
 # ---------------------------------------------------------------- kit pour Grafana distant
 section "Kit pour la machine Grafana distante"
 run --hint "network.host de /etc/wazuh-indexer/opensearch.yml" "L'indexer écoute sur ${MANAGER_IP}:9200" \
-  bash -c "ss -tlnH | awk '{print \$4}' | grep -Eq '(^|[^0-9.])(${MANAGER_IP//./\\.}|0\\.0\\.0\\.0|\\*|\\[::\\]):9200$'"
+  output_has "(^|[^0-9.])(${MANAGER_IP//./\\.}|0\\.0\\.0\\.0|\\*|\\[::\\]):9200[[:space:]]" ss -tlnH
 KIT_NAME="wazuh-grafana-kit"; KIT_FILE="$SECRETS_DIR/$KIT_NAME.tar.gz"
 WORK="$(mktemp -d)"; trap 'rm -rf "$WORK"' EXIT
 KIT="$WORK/$KIT_NAME"; mkdir -p "$KIT/dashboards"

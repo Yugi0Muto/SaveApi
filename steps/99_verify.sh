@@ -29,7 +29,7 @@ done
 
 section "Ports en écoute"
 for p in 1514 1515 443 9200 55000; do
-  check "port $p en écoute" "port $p absent : le service correspondant est arrêté" bash -c "ss -tlnH | awk '{print \$4}' | grep -Eq '[:.]${p}\$'"
+  check "port $p en écoute" "port $p absent : le service correspondant est arrêté" output_has "[:.]${p}[[:space:]]" ss -tlnH
 done
 
 section "Configuration Wazuh"

@@ -46,16 +46,16 @@ elif (( disk_gb < 100 )); then soft "Disque /var : ${disk_gb} Go libres (< 100 G
 else ok "Disque /var : ${disk_gb} Go libres"; fi
 
 section "Réseau"
-if ip -4 addr show | grep -qw "inet ${MANAGER_IP}"; then ok "L'adresse $MANAGER_IP est bien configurée sur ce serveur"
+if output_has "inet ${MANAGER_IP//./\\.}/" ip -4 addr show; then ok "L'adresse $MANAGER_IP est bien configurée sur ce serveur"
 else ko "L'adresse $MANAGER_IP n'est PAS configurée sur ce serveur (ip -4 addr)"; fi
-if ip -4 addr show | grep -w "inet ${MANAGER_IP}" | grep -q dynamic; then
+if output_has "inet ${MANAGER_IP//./\\.}/.*dynamic" ip -4 addr show; then
   soft "L'adresse $MANAGER_IP est attribuée par DHCP : la rendre fixe (ou réservée sur le serveur DHCP)"
 fi
 if wazuh_installed; then
   ok "Wazuh est déjà installé : contrôle des ports ignoré (ils sont utilisés par Wazuh)."
 else
   for p in 443 1514 1515 9200 55000; do
-    if ss -tlnH | awk '{print $4}' | grep -Eq "[:.]${p}$"; then ko "Port $p déjà utilisé : $(ss -tlnpH "sport = :$p" | awk '{print $6}' | head -1)"
+    if output_has "[:.]${p}[[:space:]]" ss -tlnH; then ko "Port $p déjà utilisé : $(ss -tlnpH "sport = :$p" | awk '{print $6}' | head -1)"
     else ok "Port $p libre"; fi
   done
 fi
@@ -66,7 +66,7 @@ done
 rm -f /tmp/.pf.err
 
 section "Horloge"
-if timedatectl show -p NTPSynchronized --value 2>/dev/null | grep -q yes; then ok "Horloge synchronisée (NTP)"
+if output_has '^yes$' timedatectl show -p NTPSynchronized --value; then ok "Horloge synchronisée (NTP)"
 else soft "Horloge NON synchronisée : les alertes seraient mal datées (installer chrony ou activer systemd-timesyncd)"; fi
 ok "Fuseau horaire : $(timedatectl show -p Timezone --value 2>/dev/null || echo inconnu) (utilisé par la règle « connexion hors heures »)"
 

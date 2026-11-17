@@ -155,7 +155,7 @@ if [[ "$YARA_ENABLE" == oui ]]; then
     for d in $YARA_DIRS_SCHEDULED; do echo "    <directories check_all=\"yes\">${d}</directories>"; done
     echo "  </syscheck>"; echo "</agent_config>"; } > "$TMP/feat-yara.conf"
   run "Configuration du groupe feat-yara" cat "$TMP/feat-yara.conf"
-  if ! "$OSSEC_DIR/bin/agent_groups" -l 2>/dev/null | grep -Eq "^[[:space:]]*feat-yara \("; then
+  if ! output_has "^[[:space:]]*feat-yara \(" "$OSSEC_DIR/bin/agent_groups" -l; then
     run "Création du groupe feat-yara" "$OSSEC_DIR/bin/agent_groups" -a -g feat-yara -q
   fi
   run "Installation de la configuration du groupe" install -o wazuh -g wazuh -m 660 "$TMP/feat-yara.conf" "$OSSEC_DIR/etc/shared/feat-yara/agent.conf"

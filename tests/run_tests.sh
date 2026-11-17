@@ -112,6 +112,22 @@ t "regex YARA générée compatible PCRE (python re)" python3 -c "
 import re; r=re.compile(r'^(/var/www|/tmp|/home/a\.b)/'); assert r.search('/var/www/x.php') and r.search('/tmp/a') and not r.search('/home/aXb/f') and not r.search('/etc/passwd')"
 t "flux réseau : tableau généré depuis les réponses" bash -c 'bash -c "source lib/common.sh; ans_set MANAGER_IP 10.9.9.9; ans_set GRAFANA_MODE remote; ans_set GRAFANA_REMOTE_IPS 10.9.9.60; network_flows" | grep -q "10.9.9.60" '
 
+echo "== 4b. Redémarrage du manager (régression : wazuh-control status renvoie 1 si un démon optionnel est arrêté)"
+mkdir -p "$TMP/fw/bin" "$TMP/fw/logs" "$TMP/fbin"; : > "$TMP/fw/logs/ossec.log"
+printf '#!/bin/sh\nexit 0\n' > "$TMP/fbin/systemctl"
+cat > "$TMP/fw/bin/wazuh-control" <<'EOF'
+#!/bin/sh
+printf 'wazuh-clusterd not running...\nwazuh-modulesd is running...\nwazuh-remoted is running...\nwazuh-analysisd is running...\nwazuh-maild not running...\nwazuh-db is running...\n'
+exit 1
+EOF
+chmod +x "$TMP/fbin/systemctl" "$TMP/fw/bin/wazuh-control"
+t "wazuh_restart : démons optionnels arrêtés = manager considéré actif (set -euo pipefail)" \
+  env PATH="$TMP/fbin:$PATH" OSSEC_DIR="$TMP/fw" bash -c 'set -euo pipefail; source lib/common.sh; wazuh_restart'
+sed -i 's/wazuh-analysisd is running/wazuh-analysisd not running/' "$TMP/fw/bin/wazuh-control"
+t "wazuh_restart : analysisd arrêté = échec détecté" bash -c '! env PATH="'"$TMP"'/fbin:$PATH" OSSEC_DIR="'"$TMP"'/fw" timeout 200 bash -c "source lib/common.sh; sleep() { :; }; wazuh_restart" >/dev/null 2>&1'
+t "output_has : ignore le code retour et ne coupe pas le tube" L 'output_has "b" bash -c "echo a; echo b; exit 3" && ! output_has "z" echo a && output_has "^x" bash -c "yes x | head -100000"'
+t "aucun « commande | grep -q » dans les scripts (faux négatifs en pipefail)" bash -c '! grep -rnE "\|[[:space:]]*grep[[:space:]]+-[a-zA-Z]*q" install.sh lib steps tools agents grafana --include=*.sh | grep -vE "^[^:]+:[0-9]+:[[:space:]]*#"'
+
 echo "== 5. E-mail : paramètres Postfix des 3 modes"
 E() { bash -c 'source lib/email.sh; postfix_settings '"$*"; }
 t "gmail : 587, TLS vérifié, authentification" bash -c 'o="$(bash -c "source lib/email.sh; postfix_settings gmail smtp.gmail.com 587 verify oui")"; grep -qx "relayhost = \[smtp.gmail.com\]:587" <<< "$o" && grep -qx "smtp_tls_security_level = secure" <<< "$o" && grep -qx "smtp_sasl_auth_enable = yes" <<< "$o" && grep -qx "inet_interfaces = loopback-only" <<< "$o"'

@@ -11,7 +11,7 @@ step_header 08 "Alertes SMS"
 require_wazuh
 
 if ! ask_yes_no SMS_ENABLE "Envoyer les alertes critiques par SMS (Africa's Talking) ?" non; then
-  if systemctl list-unit-files 2>/dev/null | grep -q '^wazuh-sms-alerter'; then
+  if output_has '^wazuh-sms-alerter' systemctl list-unit-files; then
     run "Arrêt du service SMS" systemctl disable --now wazuh-sms-alerter
   fi
   log_ok "Alertes SMS désactivées."; exit 0

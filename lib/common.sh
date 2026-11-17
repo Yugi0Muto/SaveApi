@@ -301,7 +301,12 @@ backup_file() { # backup_file FICHIER -> LAST_BACKUP
     run "Sauvegarde de $1 avant modification" cp -p "$1" "$LAST_BACKUP"
   fi
 }
-pkg_installed() { dpkg-query -W -f='${Status}' "$1" 2>/dev/null | grep -q "install ok installed"; }
+# output_has MOTIF commande... : vrai si la sortie de la commande contient le motif (ERE).
+# La sortie est d'abord capturée : le code retour de la commande est ignoré (ex. « wazuh-control status »
+# renvoie 1 dès qu'un démon optionnel est arrêté) et « grep -q » ne coupe pas le tube (SIGPIPE).
+# Ne jamais écrire « commande | grep -q » dans un script en « set -o pipefail ».
+output_has() { local pat="$1" out; shift; out="$("$@" 2>/dev/null || true)"; grep -Eq -- "$pat" <<< "$out"; }
+pkg_installed() { output_has "install ok installed" dpkg-query -W -f='${Status}' "$1"; }
 pkg_install() { # pkg_install paquet... (n'installe que les absents)
   local missing=() p
   for p in "$@"; do pkg_installed "$p" || missing+=("$p"); done
@@ -334,17 +339,23 @@ wazuh_restart() {
   local before
   before="$(wc -l < "$OSSEC_DIR/logs/ossec.log" 2>/dev/null || echo 0)"
   run --allow-fail "Redémarrage du manager Wazuh" systemctl restart wazuh-manager || true
-  local i
+  # « wazuh-control status » renvoie 1 dès qu'un démon OPTIONNEL est arrêté (clusterd, maild,
+  # agentlessd, integratord, csyslogd : normal sur un serveur seul) : on lit sa sortie, pas son code.
+  local i st errs
   for i in $(seq 1 45); do
-    if "$OSSEC_DIR/bin/wazuh-control" status 2>/dev/null | grep -q "wazuh-analysisd is running" &&
-       "$OSSEC_DIR/bin/wazuh-control" status 2>/dev/null | grep -q "wazuh-remoted is running"; then
-      log_ok "wazuh-manager actif (analysisd et remoted démarrés en ${i}x2 s)."; return 0
+    st="$("$OSSEC_DIR/bin/wazuh-control" status 2>&1 || true)"
+    if grep -q "wazuh-analysisd is running" <<< "$st" && grep -q "wazuh-remoted is running" <<< "$st" &&
+       systemctl is-active --quiet wazuh-manager; then
+      log_ok "wazuh-manager actif (analysisd et remoted démarrés, vérifié en $((i*2)) s)."; return 0
     fi
     sleep 2
   done
-  log_err "Le manager ne démarre pas correctement. Erreurs relevées dans ossec.log depuis le redémarrage :"
-  tail -n +"$((before+1))" "$OSSEC_DIR/logs/ossec.log" 2>/dev/null | grep -E "ERROR|CRITICAL" | tail -20 | sed 's/^/  │ /'
-  run --allow-fail "État des démons Wazuh" "$OSSEC_DIR/bin/wazuh-control" status || true
+  log_err "Le manager ne démarre pas correctement (analysisd ou remoted arrêté après 90 s)."
+  errs="$(tail -n +"$((before+1))" "$OSSEC_DIR/logs/ossec.log" 2>/dev/null | grep -E "ERROR|CRITICAL" | tail -20 || true)"
+  if [[ -n "$errs" ]]; then echo "  Erreurs relevées dans ossec.log depuis le redémarrage :"; sed 's/^/  │ /' <<< "$errs"
+  else echo "  Aucune ligne ERROR/CRITICAL dans ossec.log depuis le redémarrage."; fi
+  echo "  État des démons :"; sed 's/^/  │ /' <<< "$st"
+  run --allow-fail "Journal systemd du manager" journalctl -u wazuh-manager -n 20 --no-pager || true
   return 1
 }
 
