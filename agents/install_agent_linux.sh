@@ -5,7 +5,7 @@
 #
 # Interactif :      sudo bash agents/install_agent_linux.sh
 # Automatisé :      sudo bash agents/install_agent_linux.sh --manager-ip 10.10.10.20 --segment dmz \
-#                        --role web --name dmz-web01 --version 4.14.9-1 --yara --password-file /root/pw
+#                        --role web --name dmz-web01 --version 4.14.10-1 --yara --password-file /root/pw
 # Options : --whodata (audit « qui a modifié »), --deb-path FICHIER.deb (machine sans Internet),
 #           --yara-method source|package
 set -euo pipefail
@@ -46,9 +46,9 @@ MANAGER_IP="${MANAGER_IP:-$AGENT_MANAGER_IP}"; v_ipv4 "$MANAGER_IP" >/dev/null |
 if [[ -z "$VERSION" ]]; then
   explain <<'TXT'
 La version de l'agent doit être INFÉRIEURE OU ÉGALE à celle du manager.
-Sur le serveur Wazuh : dpkg-query -W wazuh-manager   (ex : 4.14.9-1)
+Sur le serveur Wazuh : dpkg-query -W wazuh-manager   (ex : 4.14.10-1)
 TXT
-  ask AGENT_VERSION "Version de l'agent à installer (ex : 4.14.9-1)" "" v_nonempty; VERSION="$AGENT_VERSION"
+  ask AGENT_VERSION "Version de l'agent à installer (ex : 4.14.10-1)" "" v_nonempty; VERSION="$AGENT_VERSION"
 fi
 if [[ -z "$YARA" ]]; then
   explain <<'TXT'

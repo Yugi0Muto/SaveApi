@@ -113,7 +113,7 @@ avec une vérification à la fin de chaque partie.
 |---|---|---|
 | 00 Préflight | Contrôles (OS, ressources, ports, Internet, NTP). Ne modifie rien. | IP du serveur, postes d'administration |
 | 01 SSH | Durcissement **optionnel**, mesure par mesure (7 mesures expliquées, risques, retour arrière) | oui/non par mesure |
-| 02 Wazuh | Installation officielle (`wazuh-install.sh`), branche 4.14 | adresse d'écoute de l'indexer |
+| 02 Wazuh | Installation officielle (`wazuh-install.sh`), branche 4.14 (dernière stable : 4.14.10). Si l'erreur « The Wazuh API user … does not exist » apparaît, propose des solutions au choix | adresse d'écoute de l'indexer |
 | 03 Manager | Enrôlement par mot de passe, liste blanche, réponse active, groupes d'agents | IP jamais bloquées, durée de blocage |
 | 04 Règles | Déploiement + **auto-test** des règles du bundle (`docs/REGLES.md`) | |
 | 05 Rétention | Politique ISM de l'indexer + purge des fichiers locaux | durées de conservation |

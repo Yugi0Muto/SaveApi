@@ -162,6 +162,22 @@ En cas d'échec, la cause est presque toujours dans :
 `journalctl -u wazuh-manager -n 50 --no-pager` et `grep -nE "ERROR|could not" /var/log/wazuh-install.log | tail`.
 Avant de relancer, refaire la partie 1.
 
+**Erreur « The Wazuh API user wazuh does not exist » / « … wazuh-wui does not exist »**
+([wazuh/wazuh#24587](https://github.com/wazuh/wazuh/issues/24587)). L'assistant change les mots de passe
+de l'API avant que celle-ci ne soit prête. L'étape 02 du bundle propose alors des solutions au choix ;
+à la main :
+
+- *L'installation s'est terminée (code 0) mais le dashboard indique « API down »* : poser les mots de
+  passe de l'API depuis `wazuh-passwords.txt` (utilisateurs `wazuh-wui` puis `wazuh`, via
+  `PUT https://localhost:55000/security/users/<id>` authentifié en `wazuh:wazuh`), recopier celui de
+  `wazuh-wui` dans `/usr/share/wazuh-dashboard/data/wazuh/config/wazuh.yml` (`password:`), puis
+  `systemctl restart wazuh-dashboard`.
+- *L'installation a échoué* : dans une copie de `wazuh-install.sh`, ajouter au début de la fonction
+  `installCommon_changePasswords` une boucle qui attend que
+  `curl -sk -u wazuh:wazuh -X POST "https://localhost:55000/security/user/authenticate?raw=true"`
+  renvoie un jeton (`eyJ…`), puis relancer `bash wazuh-install.sh -a -o`. Relancer simplement avec `-o`
+  suffit parfois (erreur intermittente).
+
 ---
 
 ## 3. Configuration du manager

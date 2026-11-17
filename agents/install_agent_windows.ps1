@@ -2,7 +2,7 @@
 .SYNOPSIS
   Installe et enrôle un agent Wazuh Windows (PowerShell en Administrateur).
 .EXAMPLE
-  .\install_agent_windows.ps1 -ManagerIP 10.10.10.20 -Segment employees -AgentName PC-COMPTA-01 -Version 4.14.9-1
+  .\install_agent_windows.ps1 -ManagerIP 10.10.10.20 -Segment employees -AgentName PC-COMPTA-01 -Version 4.14.10-1
 .NOTES
   La configuration (FIM, journaux d'événements) vient du manager via les groupes.
   Machines sans Internet : -MsiPath avec le MSI copié depuis un partage interne.
@@ -11,7 +11,7 @@ param(
   [Parameter(Mandatory=$true)][string]$ManagerIP,
   [Parameter(Mandatory=$true)][ValidateSet('dmz','servers','employees')][string]$Segment,
   [Parameter(Mandatory=$true)][string]$AgentName,
-  [Parameter(Mandatory=$true)][string]$Version,          # doit être <= version du manager (ex: 4.14.9-1)
+  [Parameter(Mandatory=$true)][string]$Version,          # doit être <= version du manager (ex: 4.14.10-1)
   [switch]$Whodata,
   [SecureString]$RegistrationPassword,
   [string]$MsiPath = "",

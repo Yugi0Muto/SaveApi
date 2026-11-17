@@ -336,11 +336,11 @@ while read -r nom seg role; do
   scp -r /opt/wazuh-bundle "$nom":/tmp/
   ssh -t "$nom" sudo bash /tmp/wazuh-bundle/agents/install_agent_linux.sh \\
       --manager-ip 10.10.10.20 --segment "$seg" --role "$role" --name "$nom" \\
-      --version 4.14.9-1 --password-file /root/enrol.pw
+      --version 4.14.10-1 --password-file /root/enrol.pw
 done < liste.txt""")
 h2("Installer un agent Windows")
 code(""".\\install_agent_windows.ps1 -ManagerIP 10.10.10.20 -Segment employees `
-    -AgentName PC-COMPTA-01 -Version 4.14.9-1""",
+    -AgentName PC-COMPTA-01 -Version 4.14.10-1""",
      "PowerShell en administrateur")
 p("Pour un parc Windows, le même script se déploie par GPO ou par l'outil de déploiement habituel. Activer aussi, "
   "par GPO, l'audit « Création du processus » et « Autres événements d'accès aux objets » : sans eux, Windows "

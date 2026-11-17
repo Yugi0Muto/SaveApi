@@ -585,7 +585,7 @@ code("""sudo bash agents/install_agent_linux.sh            # interactif
 
 # automatisé (exemple : serveur web en DMZ)
 sudo bash agents/install_agent_linux.sh --manager-ip 10.10.10.20 --segment dmz \\
-     --role web --name dmz-web01 --version 4.14.9-1 --yara --password-file /root/pw""")
+     --role web --name dmz-web01 --version 4.14.10-1 --yara --password-file /root/pw""")
 bullets(["La version de l'agent doit être <b>inférieure ou égale</b> à celle du manager (" +
          c("dpkg-query -W wazuh-manager") + " sur le serveur).",
          "Mot de passe d'enrôlement, sur le serveur : " + c("grep AUTHD_PASSWORD /root/.wazuh-bundle/secrets.env") + ".",
@@ -594,7 +594,7 @@ bullets(["La version de l'agent doit être <b>inférieure ou égale</b> à celle
 h2("8.2 Agent Windows")
 p("PowerShell <b>en administrateur</b> :")
 code(""".\\install_agent_windows.ps1 -ManagerIP 10.10.10.20 -Segment employees `
-    -AgentName PC-COMPTA-01 -Version 4.14.9-1   # -Whodata, -MsiPath, -Sha256 en option""")
+    -AgentName PC-COMPTA-01 -Version 4.14.10-1   # -Whodata, -MsiPath, -Sha256 en option""")
 p("Pour les règles Windows du bundle, activer par GPO l'audit « Création du processus » (4688) et « Autres "
   "événements d'accès aux objets » (4698).")
 h2("8.3 Vérifier un agent")
