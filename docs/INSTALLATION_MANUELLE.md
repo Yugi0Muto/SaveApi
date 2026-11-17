@@ -162,6 +162,22 @@ En cas d'échec, la cause est presque toujours dans :
 `journalctl -u wazuh-manager -n 50 --no-pager` et `grep -nE "ERROR|could not" /var/log/wazuh-install.log | tail`.
 Avant de relancer, refaire la partie 1.
 
+**Erreur « Your system does not meet the recommended minimum hardware requirements »** : moins de
+2 cœurs ou de 3 700 Mo de RAM. Sans changer le matériel : créer un fichier d'échange puis relancer avec
+`-i` (ignore le contrôle ; l'indexer risque d'être lent) :
+
+```bash
+fallocate -l 4G /swapfile && chmod 600 /swapfile && mkswap /swapfile && swapon /swapfile
+echo '/swapfile none swap sw 0 0' >> /etc/fstab
+bash wazuh-install.sh -a -i
+```
+
+**Erreur « The IP x.x.x.x is public »** (mode pas à pas avec `config.yml`) : l'assistant refuse une IP
+publique dans les certificats. Au choix : indexer sur 127.0.0.1 (`-a`), ou un nom DNS à la place de l'IP
+dans `config.yml` (ex. `wazuh.lan`, déclaré dans `/etc/hosts` du serveur et de Grafana) — le contrôle ne
+porte que sur les adresses IP. L'étape 02 propose aussi une copie de l'assistant qui accepte l'IP
+publique (filtrer alors le port 9200 au pare-feu).
+
 **Erreur « The Wazuh API user wazuh does not exist » / « … wazuh-wui does not exist »**
 ([wazuh/wazuh#24587](https://github.com/wazuh/wazuh/issues/24587)). L'assistant change les mots de passe
 de l'API avant que celle-ci ne soit prête. L'étape 02 du bundle propose alors des solutions au choix ;

@@ -85,8 +85,13 @@ api_check() { # l'API accepte-t-elle wazuh-wui avec le mot de passe généré ?
   [[ -n "$pw" ]] && api_token wazuh-wui "$pw" >/dev/null
 }
 
-patch_installer() { # patch_installer attente SECONDES | sansapi
+apply_patches() { # reconstruit wazuh-install.sh depuis l'original + les corrections de PATCHES
   cp wazuh-install.sh.orig wazuh-install.sh
+  local p
+  for p in "${PATCHES[@]}"; do patch_installer "${p%%:*}" "${p#*:}"; done
+}
+
+patch_installer() { # patch_installer attente SECONDES | sansapi - | ippublique -
   python3 - "$@" <<'PYP'
 import sys, re
 mode = sys.argv[1]
@@ -125,6 +130,11 @@ elif mode == "sansapi":
     if s.count(anchor) != 1:
         sys.exit("fonction installCommon_changePasswordApi introuvable : correctif non applicable à cette version")
     s = s.replace(anchor, anchor + '    common_logger "[wazuh-bundle] Changement des mots de passe de l\'API reporté après l\'installation."\n    return 0\n', 1)
+elif mode == "ippublique":
+    pat = re.compile(r'common_logger -e "The IP \$\{ip\} is public\."\n(\s*)exit 1\n')
+    s, n = pat.subn(lambda m: 'common_logger -w "[wazuh-bundle] The IP ${ip} is public: accepted on purpose (filter port 9200 on the firewall)."\n', s)
+    if n == 0:
+        sys.exit("contrôle « IP publique » introuvable : correctif non applicable à cette version")
 else:
     sys.exit("mode inconnu")
 open(path, "w").write(s)
@@ -141,13 +151,13 @@ install_attempt() { # install_attempt [-o] : lance l'installation ; INSTALL_RC e
   : > "$log"
   if [[ "$INDEXER_HOST" == 127.0.0.1 ]]; then
     run --allow-fail --hint "Journal détaillé : /var/log/wazuh-install.log" \
-      "Installation tout-en-un (indexer sur 127.0.0.1)" bash wazuh-install.sh -a "${ow[@]}" || rc=$?
+      "Installation tout-en-un (indexer sur 127.0.0.1)" bash wazuh-install.sh -a "${ow[@]}" "${EXTRA[@]}" || rc=$?
     printf '%s\n' "$RUN_OUTPUT" >> "$log"
   else
     if (( ${#ow[@]} == 0 )); then
       explain <<TXT
-Mode « indexer sur ${MANAGER_IP} » : on suit la procédure officielle pas à pas avec un fichier
-config.yml qui déclare l'adresse ${MANAGER_IP} pour l'indexer, le manager et le dashboard
+Mode « indexer sur ${NODE_ADDR} » : on suit la procédure officielle pas à pas avec un fichier
+config.yml qui déclare l'adresse ${NODE_ADDR} pour l'indexer, le manager et le dashboard
 (les certificats sont générés pour cette adresse).
 TXT
     fi
@@ -155,22 +165,22 @@ TXT
 nodes:
   indexer:
     - name: node-1
-      ip: "${MANAGER_IP}"
+      ip: "${NODE_ADDR}"
   server:
     - name: wazuh-1
-      ip: "${MANAGER_IP}"
+      ip: "${NODE_ADDR}"
   dashboard:
     - name: dashboard
-      ip: "${MANAGER_IP}"
+      ip: "${NODE_ADDR}"
 YML
     rm -f wazuh-install-files.tar
     run "Fichier config.yml utilisé" cat config.yml
     local -a steps=(
       "Génération des certificats et des mots de passe|--generate-config-files"
-      "Installation de l'indexer|--wazuh-indexer node-1 ${ow[*]}"
+      "Installation de l'indexer|--wazuh-indexer node-1 ${ow[*]} ${EXTRA[*]}"
       "Initialisation du cluster de l'indexer|--start-cluster"
-      "Installation du manager (serveur Wazuh)|--wazuh-server wazuh-1 ${ow[*]}"
-      "Installation du dashboard|--wazuh-dashboard dashboard ${ow[*]}")
+      "Installation du manager (serveur Wazuh)|--wazuh-server wazuh-1 ${ow[*]} ${EXTRA[*]}"
+      "Installation du dashboard|--wazuh-dashboard dashboard ${ow[*]} ${EXTRA[*]}")
     local st args
     for st in "${steps[@]}"; do
       read -ra args <<< "${st#*|}"
@@ -221,59 +231,145 @@ PYD
   fi
 }
 
+# ── Erreurs connues : un menu de solutions n'est proposé QUE si l'une d'elles apparaît ──
+HW_RE="does not meet the recommended minimum hardware requirements"
+PUBIP_RE="The IP [^ ]+ is public"
+EXTRA=(); PATCHES=(); NODE_ADDR="$MANAGER_IP"
+v_fqdn() { [[ "$1" =~ ^([A-Za-z0-9]([A-Za-z0-9-]*[A-Za-z0-9])?\.)+[A-Za-z]{2,}$ ]] || { echo "nom DNS complet attendu (ex : wazuh.lan)"; return 1; }; }
+known_error() { # -> hw | pubip | api | (rien)
+  if grep -Eq "$HW_RE" "$INSTALL_LOG"; then echo hw
+  elif grep -Eq "$PUBIP_RE" "$INSTALL_LOG"; then echo pubip
+  elif grep -Eq "$API_ERR_RE" "$INSTALL_LOG"; then echo api
+  fi
+}
+add_patch() { local p; for p in "${PATCHES[@]}"; do [[ "$p" == "$1" ]] && return 0; done; PATCHES+=("$1"); }
+del_patch() { local p keep=(); for p in "${PATCHES[@]}"; do [[ "$p" == "$1"* ]] || keep+=("$p"); done; PATCHES=("${keep[@]}"); }
+add_extra() { local e; for e in "${EXTRA[@]}"; do [[ "$e" == "$1" ]] && return 0; done; EXTRA+=("$1"); }
+retry() { # relance avec les corrections en cours
+  if (( ${#PATCHES[@]} )); then run "Corrections de l'assistant : ${PATCHES[*]}" apply_patches; show_patch
+  else cp wazuh-install.sh.orig wazuh-install.sh; fi
+  install_attempt -o
+}
+make_swap() { # make_swap GO : fichier d'échange /swapfile (persistant)
+  local gb="$1" avail_gb
+  if grep -qx /swapfile <<< "$(swapon --show=NAME --noheadings 2>/dev/null || true)"; then log_ok "/swapfile est déjà actif."; return 0; fi
+  avail_gb=$(( $(df --output=avail -k / | tail -1) / 1024 / 1024 ))
+  (( avail_gb > gb + 5 )) || die "Espace disque insuffisant pour ${gb} Go de swap (${avail_gb} Go libres sur /)."
+  [[ -e /swapfile ]] && die "/swapfile existe déjà mais n'est pas actif : le vérifier à la main (swapon /swapfile)."
+  run "Création du fichier d'échange de ${gb} Go" bash -c "fallocate -l ${gb}G /swapfile || dd if=/dev/zero of=/swapfile bs=1M count=$((gb*1024)) status=none"
+  run "Droits du fichier d'échange (root uniquement)" chmod 600 /swapfile
+  run "Formatage du fichier d'échange" mkswap /swapfile
+  run "Activation du fichier d'échange" swapon /swapfile
+  if ! grep -qE '^/swapfile[[:space:]]' /etc/fstab; then
+    backup_file /etc/fstab
+    run_sh "Activation au démarrage (/etc/fstab)" "echo '/swapfile none swap sw 0 0' >> /etc/fstab"
+  fi
+  run_sh "Swap utilisé en dernier recours (vm.swappiness=10)" "echo 'vm.swappiness=10' > /etc/sysctl.d/99-wazuh-bundle-swap.conf && sysctl -q -p /etc/sysctl.d/99-wazuh-bundle-swap.conf"
+  run "Mémoire disponible" free -h
+}
+
 install_attempt
 attempt=1
-while grep -Eq "$API_ERR_RE" "$INSTALL_LOG"; do
+while kind="$(known_error)"; [[ -n "$kind" ]]; do
   echo
-  log_warn "Erreur connue détectée : $(grep -Eo "$API_ERR_RE" "$INSTALL_LOG" | sort -u | paste -sd ';' | sed 's/;/ ; /g')"
-  explain <<TXT
+  (( attempt <= 5 )) || die "Erreur toujours présente après $attempt tentatives. Journal : /var/log/wazuh-install.log"
+  [[ "$NONINTERACTIVE" == 1 && $attempt -gt 1 ]] && die "Mode non interactif : une erreur connue persiste après la première solution."
+  attempt=$((attempt+1))
+  case "$kind" in
+  hw)
+    cores="$(nproc)"; ram_mb="$(free -m | awk 'NR==2{print $2}')"; swap_mb="$(free -m | awk '/^Swap/{print $2}')"
+    log_warn "Erreur connue détectée : ressources sous le minimum recommandé par Wazuh."
+    explain <<TXT
+Ce serveur : ${cores} cœur(s), ${ram_mb} Mo de RAM, ${swap_mb} Mo de swap.
+Wazuh demande au moins 2 cœurs et 4 Go de RAM pour l'indexer et le dashboard (contrôle sur la RAM
+totale, seuil 3 700 Mo). L'option officielle -i permet de passer outre : l'installation fonctionne
+mais l'indexer (Java) risque d'être lent ou arrêté par manque de mémoire sous forte charge.
+Un fichier d'échange (swap) évite cet arrêt brutal ; il ne compense pas un processeur trop faible.
+Rien n'a encore été installé.
+TXT
+    ask_choice HW_FIX "Solution à essayer" swap \
+      "swap|Créer un fichier d'échange (swap) puis relancer en ignorant le contrôle (-i) — recommandé" \
+      "ignorer|Relancer en ignorant le contrôle (-i), sans autre changement" \
+      "abandon|Arrêter l'étape (rien n'est modifié)"
+    case "$HW_FIX" in
+      abandon) die "Arrêt demandé." ;;
+      swap) ask SWAP_GB "Taille du fichier d'échange, en Go" "4" "v_int 1 32"; make_swap "$SWAP_GB" ;;
+    esac
+    add_extra -i
+    retry ;;
+  pubip)
+    log_warn "Erreur connue détectée : $(grep -Eo "$PUBIP_RE" "$INSTALL_LOG" | head -1)"
+    explain <<TXT
+L'assistant Wazuh refuse d'inscrire une adresse IP publique (${NODE_ADDR}) dans les certificats,
+pour éviter d'exposer l'indexer sur Internet. Ce contrôle ne concerne que les adresses IP : un nom
+DNS est accepté. Rien n'a encore été installé.
+TXT
+    ask_choice PUBIP_FIX "Solution à essayer" ippublique \
+      "ippublique|Garder ${MANAGER_IP} avec une copie de l'assistant qui accepte l'IP publique (filtrer le port 9200 au pare-feu)" \
+      "nom|Utiliser un nom DNS (ex : wazuh.lan) qui pointe vers ${MANAGER_IP} ; le serveur Grafana devra aussi le résoudre" \
+      "local|Revenir à l'indexer sur 127.0.0.1 (Grafana devra alors être sur ce serveur)" \
+      "abandon|Arrêter l'étape (rien n'est modifié)"
+    case "$PUBIP_FIX" in
+      abandon) die "Arrêt demandé." ;;
+      ippublique) add_patch "ippublique:-"; NODE_ADDR="$MANAGER_IP" ;;
+      nom)
+        ask WAZUH_NODE_NAME "Nom DNS du serveur Wazuh" "wazuh.lan" v_fqdn
+        if [[ "$(getent ahostsv4 "$WAZUH_NODE_NAME" | awk 'NR==1{print $1}')" != "$MANAGER_IP" ]]; then
+          backup_file /etc/hosts
+          run_sh "Déclaration de $WAZUH_NODE_NAME → $MANAGER_IP dans /etc/hosts" \
+            "sed -i '/[[:space:]]${WAZUH_NODE_NAME//./\\.}\([[:space:]]\|\$\)/d' /etc/hosts && echo '${MANAGER_IP} ${WAZUH_NODE_NAME} # wazuh-bundle' >> /etc/hosts"
+        fi
+        log_warn "Le serveur Grafana devra résoudre $WAZUH_NODE_NAME (DNS de l'entreprise ou ligne « ${MANAGER_IP} ${WAZUH_NODE_NAME} » dans son /etc/hosts)."
+        del_patch ippublique; NODE_ADDR="$WAZUH_NODE_NAME" ;;
+      local) del_patch ippublique; ans_set INDEXER_HOST_MODE local ;;
+    esac
+    if [[ "$PUBIP_FIX" == local ]]; then INDEXER_HOST=127.0.0.1; else INDEXER_HOST="$NODE_ADDR"; fi
+    ans_set INDEXER_HOST "$INDEXER_HOST"
+    retry ;;
+  api)
+    log_warn "Erreur connue détectée : $(grep -Eo "$API_ERR_RE" "$INSTALL_LOG" | sort -u | paste -sd ';' | sed 's/;/ ; /g')"
+    explain <<TXT
 L'assistant Wazuh a voulu changer les mots de passe de l'API (utilisateurs « wazuh » et
 « wazuh-wui ») avant que l'API ne soit prête : il ne les a pas trouvés.
 Code retour de l'installateur : ${INSTALL_RC} (s'il n'est pas 0, l'assistant a déjà désinstallé ce
 qu'il avait posé). Le script d'origine reste dans $WORK/wazuh-install.sh.orig ; les corrections
 ne s'appliquent qu'à la copie de ce dossier.
 TXT
-  opts=(
-    "attente|Relancer avec un assistant corrigé qui attend que l'API soit prête avant de changer les mots de passe (recommandé)"
-    "sansapi|Relancer en laissant l'assistant ignorer l'API, puis poser nous-mêmes les mots de passe de l'API"
-    "relance|Relancer l'installation telle quelle (-o), l'erreur étant intermittente")
-  def=attente
-  if (( INSTALL_RC == 0 )); then
-    opts=("corriger|Garder l'installation et poser maintenant les mots de passe de l'API (sans réinstaller)" "${opts[@]}")
-    def=corriger
-  fi
-  opts+=("abandon|Arrêter l'étape (rien d'autre n'est modifié)")
-  (( attempt <= 3 )) || die "Erreur toujours présente après $attempt tentatives. Journal : /var/log/wazuh-install.log"
-  [[ "$NONINTERACTIVE" == 1 && $attempt -gt 1 ]] && die "Mode non interactif : l'erreur persiste après la solution « $API_FIX »."
-  ans_set API_FIX ""
-  ask_choice API_FIX "Solution à essayer" "$def" "${opts[@]}"
-  case "$API_FIX" in
-    abandon) die "Arrêt demandé. Le dossier de travail $WORK est conservé." ;;
-    corriger)
-      api_passwords_after 300 || die "Les mots de passe de l'API n'ont pas pu être posés."
-      : > "$INSTALL_LOG" ;;
-    attente)
-      ask API_WAIT "Attente maximale de l'API, en secondes" "300" "v_int 60 1800"
-      run "Correction de l'assistant (attente de l'API ${API_WAIT}s)" patch_installer attente "$API_WAIT"
-      show_patch
-      install_attempt -o ;;
-    sansapi)
-      run "Correction de l'assistant (changement des mots de passe de l'API désactivé)" patch_installer sansapi
-      show_patch
-      install_attempt -o
-      if (( INSTALL_RC == 0 )); then
-        api_passwords_after 600 || die "Les mots de passe de l'API n'ont pas pu être posés."
-        : > "$INSTALL_LOG"
-      fi ;;
-    relance)
-      cp wazuh-install.sh.orig wazuh-install.sh
-      install_attempt -o ;;
+    opts=(
+      "attente|Relancer avec un assistant corrigé qui attend que l'API soit prête avant de changer les mots de passe (recommandé)"
+      "sansapi|Relancer en laissant l'assistant ignorer l'API, puis poser nous-mêmes les mots de passe de l'API"
+      "relance|Relancer l'installation telle quelle (-o), l'erreur étant intermittente")
+    def=attente
+    if (( INSTALL_RC == 0 )); then
+      opts=("corriger|Garder l'installation et poser maintenant les mots de passe de l'API (sans réinstaller)" "${opts[@]}")
+      def=corriger
+    fi
+    opts+=("abandon|Arrêter l'étape (le dossier de travail est conservé)")
+    ans_set API_FIX ""
+    ask_choice API_FIX "Solution à essayer" "$def" "${opts[@]}"
+    case "$API_FIX" in
+      abandon) die "Arrêt demandé. Le dossier de travail $WORK est conservé." ;;
+      corriger)
+        api_passwords_after 300 || die "Les mots de passe de l'API n'ont pas pu être posés."
+        : > "$INSTALL_LOG" ;;
+      attente)
+        ask API_WAIT "Attente maximale de l'API, en secondes" "300" "v_int 60 1800"
+        del_patch attente; del_patch sansapi; add_patch "attente:$API_WAIT"
+        retry ;;
+      sansapi)
+        del_patch attente; add_patch "sansapi:-"
+        retry
+        if (( INSTALL_RC == 0 )); then
+          api_passwords_after 600 || die "Les mots de passe de l'API n'ont pas pu être posés."
+          : > "$INSTALL_LOG"
+        fi ;;
+      relance) del_patch attente; del_patch sansapi; retry ;;
+    esac
+    if (( INSTALL_RC == 0 )) && [[ -z "$(known_error)" ]]; then
+      run --hint "Mot de passe de wazuh-wui refusé : relancer l'étape et choisir une autre solution." \
+        "Vérification : l'API accepte wazuh-wui avec le mot de passe généré" api_check
+    fi ;;
   esac
-  attempt=$((attempt+1))
-  if (( INSTALL_RC == 0 )) && ! grep -Eq "$API_ERR_RE" "$INSTALL_LOG"; then
-    run --hint "Mot de passe de wazuh-wui refusé : relancer l'étape et choisir une autre solution." \
-      "Vérification : l'API accepte wazuh-wui avec le mot de passe généré" api_check
-  fi
 done
 (( INSTALL_RC == 0 )) || die "L'installation de Wazuh a échoué (code $INSTALL_RC). Journal détaillé : /var/log/wazuh-install.log"
 
