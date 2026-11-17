@@ -20,7 +20,9 @@ blocking_traces() { trace_scan | grep -E '^(wazuh|conflict|system)\|' | cut -d'|
 # dans /var/log/wazuh-install.log) ; en cas d'échec : extrait du journal, pistes, ARRÊT.
 wazuh_install() {
   local desc="$1"; shift
-  local rc
+  local rc since before
+  since="$(date '+%Y-%m-%d %H:%M:%S')"
+  before="$(wc -l < /var/log/wazuh-install.log 2>/dev/null || echo 0)"
   echo "${BOLD}▶ ${desc}${NC}"
   echo "  ${DIM}\$ bash wazuh-install.sh $*${NC}   ${DIM}(journal détaillé : /var/log/wazuh-install.log)${NC}"
   set +e
@@ -29,14 +31,53 @@ wazuh_install() {
   set -e
   if (( rc == 0 )); then echo "  ${GREEN}✔ réussi${NC} : ${desc}"; return 0; fi
   echo "  ${RED}✘ ÉCHEC${NC} (code retour $rc) : ${desc}"
-  echo "  Dernières lignes du journal détaillé (/var/log/wazuh-install.log) :"
-  tail -20 /var/log/wazuh-install.log 2>/dev/null | sed "s/^/  ${DIM}│${NC} /"
+  install_failure_report "$since" "$before"
+  die "Installation de Wazuh en échec. La cause est dans le diagnostic ci-dessus (section « Pourquoi »)."
+}
+
+# Diagnostic après échec : l'installateur a souvent déjà tout désinstallé (et effacé ossec.log) ; les preuves
+# restent dans le journal système (journalctl), le journal du noyau (manque de mémoire) et le journal de
+# l'installateur. Tout est affiché ET archivé pour pouvoir être transmis.
+install_failure_report() {
+  local since="$1" before="$2" diag f
+  diag="$(mktemp -d)"
+  section "Diagnostic de l'échec"
+  # mots de passe masqués (l'installateur peut les écrire dans son journal)
+  tail -n +"$((before+1))" /var/log/wazuh-install.log 2>/dev/null \
+    | sed -E -e "s/([Pp]ass(word)?[^:=]*[:=][[:space:]]*'?)[^' ]+/\1***masqué***/g" \
+          -e "s/([Pp]assword (for|of) [^ ]+ (user )?[^ ]* ?is )[^ ]+/\1***masqué***/g" > "$diag/wazuh-install-cette-tentative.log" || true
+  journalctl --since "$since" --no-pager -u wazuh-manager -u wazuh-indexer -u filebeat -u wazuh-dashboard \
+    > "$diag/journal-services.log" 2>&1 || true
+  journalctl -k --since "$since" --no-pager > "$diag/journal-noyau.log" 2>&1 || true
+  { free -h; echo; df -h /var /tmp; echo; nproc; echo; cat /etc/os-release; } > "$diag/ressources.txt" 2>&1 || true
+
+  echo "${BOLD}  Pourquoi — services Wazuh (journalctl depuis $since) :${NC}"
+  f="$(grep -iE 'error|fail|critical|exception|denied|killed|timeout|timed out|exit-code|status=[1-9]' \
+       "$diag/journal-services.log" | grep -v 'Started\|Starting' | tail -25 || true)"
+  if [[ -n "$f" ]]; then sed "s/^/  ${DIM}│${NC} /" <<< "$f"; else echo "  │ (aucune ligne d'erreur des services dans le journal système)"; fi
+
+  echo "${BOLD}  Pourquoi — installateur (lignes d'erreur de cette tentative) :${NC}"
+  f="$(grep -iE 'ERROR|WARNING|could not|failed|denied|No such file|Aucun fichier|timeout' \
+       "$diag/wazuh-install-cette-tentative.log" | tail -25 || true)"
+  if [[ -n "$f" ]]; then sed "s/^/  ${DIM}│${NC} /" <<< "$f"; else tail -15 "$diag/wazuh-install-cette-tentative.log" | sed "s/^/  ${DIM}│${NC} /"; fi
+
+  if grep -qiE 'out of memory|oom-kill|killed process' "$diag/journal-noyau.log"; then
+    echo "  ${RED}✘ Le noyau a tué un processus faute de MÉMOIRE (OOM) pendant l'installation.${NC}"
+    grep -iE 'out of memory|killed process' "$diag/journal-noyau.log" | tail -3 | sed "s/^/  ${DIM}│${NC} /"
+    echo "  ${YELLOW}Piste :${NC} 8 Go de RAM minimum pour manager + indexer + dashboard sur un même serveur ;"
+    echo "          ou réduire la mémoire de l'indexer (-Xms/-Xmx dans /etc/wazuh-indexer/jvm.options) après installation."
+  fi
+  echo "${BOLD}  Ressources :${NC} $(free -h | awk '/Mem:/{print "RAM " $2 " (disponible " $7 ")"}'), $(nproc) CPU, " \
+       "/var libre : $(df -h --output=avail /var | tail -1 | tr -d ' ')"
+
   local left; left="$(blocking_traces)"
   if [[ -n "$left" ]]; then
-    echo "  ${YELLOW}Traces encore présentes sur le système :${NC}"; sed 's/^/    - /' <<< "$left"
-    echo "  ${YELLOW}Piste :${NC} lancer l'étape 00b (nettoyage) puis relancer l'étape 02."
+    echo "  ${YELLOW}Restes laissés par l'installateur :${NC}"; sed 's/^/    - /' <<< "$left"
+    echo "  ${YELLOW}Avant de relancer :${NC} l'étape 02 lancera le nettoyage (00b) automatiquement."
   fi
-  die "Installation de Wazuh en échec. Lire les lignes « ✘ » et « ? » ci-dessus : elles donnent la cause."
+  local arch; arch="/root/wazuh-diag-$(date +%Y%m%d-%H%M%S).tar.gz"
+  ( umask 077; tar -czf "$arch" -C "$diag" . ) && echo "  ${BOLD}Diagnostic complet archivé :${NC} $arch (à transmettre au support ; mots de passe masqués)"
+  rm -rf "$diag"
 }
 
 if wazuh_complete; then
