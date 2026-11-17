@@ -128,6 +128,24 @@ t "wazuh_restart : analysisd arrêté = échec détecté" bash -c '! env PATH="'
 t "output_has : ignore le code retour et ne coupe pas le tube" L 'output_has "b" bash -c "echo a; echo b; exit 3" && ! output_has "z" echo a && output_has "^x" bash -c "yes x | head -100000"'
 t "aucun « commande | grep -q » dans les scripts (faux négatifs en pipefail)" bash -c '! grep -rnE "\|[[:space:]]*grep[[:space:]]+-[a-zA-Z]*q" install.sh lib steps tools agents grafana --include=*.sh | grep -vE "^[^:]+:[0-9]+:[[:space:]]*#"'
 
+echo "== 4c. Rétention : rattachement ISM (indexer simulé)"
+ISM() { # ISM mode -> exécute ism_attach avec un indexer_api factice
+  MODE="$1" bash -c 'source lib/common.sh
+  indexer_api() {
+    case "$2" in
+      /_cat/indices/*) [[ $MODE == vide ]] && { echo; echo "HTTP 200"; return 0; }; printf "wazuh-archives-4.x-2026.11.16\n\nHTTP 200\n";;
+      /_plugins/_ism/add/*) echo "{\"updated_indices\":1,\"failures\":false}"; echo "HTTP 200";;
+      /_plugins/_ism/change_policy/*)
+        [[ $MODE == autre ]] && { echo "{\"error\":\"security_exception\"}"; echo "HTTP 403"; return 1; }
+        echo "{\"error\":{\"reason\":\"Validation Failed: 1: no documents to get;\"},\"status\":400}"; echo "HTTP 400"; return 1;;
+    esac; }
+  ism_attach wazuh-bundle-archives "wazuh-archives-*"; echo FIN' 2>&1
+}
+export -f ISM
+t "aucun index (archivage non activé) : pas d'erreur, rien rattaché" bash -c 'o="$(ISM vide)"; grep -q "Aucun index wazuh-archives-\*" <<< "$o" && grep -q FIN <<< "$o" && ! grep -q "_ism/add" <<< "$o"'
+t "« no documents to get » sur change_policy : pas une erreur" bash -c 'o="$(ISM nodoc)"; grep -q "ce n.est pas une erreur" <<< "$o" && grep -q FIN <<< "$o"'
+t "autre erreur sur change_policy : arrêt" bash -c 'o="$(ISM autre)"; ! grep -q FIN <<< "$o" && grep -q "impossible" <<< "$o"'
+
 echo "== 5. E-mail : paramètres Postfix des 3 modes"
 E() { bash -c 'source lib/email.sh; postfix_settings '"$*"; }
 t "gmail : 587, TLS vérifié, authentification" bash -c 'o="$(bash -c "source lib/email.sh; postfix_settings gmail smtp.gmail.com 587 verify oui")"; grep -qx "relayhost = \[smtp.gmail.com\]:587" <<< "$o" && grep -qx "smtp_tls_security_level = secure" <<< "$o" && grep -qx "smtp_sasl_auth_enable = yes" <<< "$o" && grep -qx "inet_interfaces = loopback-only" <<< "$o"'

@@ -448,6 +448,33 @@ indexer_api() {
   [[ "$code" =~ ^2 ]]
 }
 
+# ism_attach POLITIQUE MOTIF : applique une politique ISM aux index EXISTANTS qui correspondent au motif.
+#   - aucun index (ex. wazuh-archives-* tant que l'archivage n'est pas activé) : rien à faire, les futurs
+#     index recevront la politique automatiquement (ism_template) ;
+#   - index sans politique : _ism/add ; index déjà gérés : _ism/change_policy (nouvelle version).
+ism_attach() {
+  local id="$1" pattern="$2" list n
+  run --hint "Vérifier l'étape 02 (mot de passe admin) et que wazuh-indexer est actif." \
+    "Index existants correspondant à $pattern" indexer_api GET "/_cat/indices/${pattern}?h=index&s=index"
+  list="$(grep -vE '^(HTTP [0-9]+)?[[:space:]]*$' <<< "$RUN_OUTPUT" || true)"
+  n="$(grep -c . <<< "$list" || true)"
+  if [[ -z "$list" ]]; then
+    log_info "Aucun index $pattern pour l'instant : rien à rattacher. Les futurs index recevront automatiquement la politique $id."
+    return 0
+  fi
+  log_info "$n index $pattern trouvé(s)."
+  run "Rattachement des index $pattern sans politique à $id" indexer_api POST "/_plugins/_ism/add/${pattern}" "{\"policy_id\":\"${id}\"}"
+  if ! run --allow-fail "Mise à jour des index $pattern déjà gérés (nouvelle version de $id)" \
+         indexer_api POST "/_plugins/_ism/change_policy/${pattern}" "{\"policy_id\":\"${id}\"}"; then
+    # « no documents to get » : aucun de ces index n'était encore géré par ISM -> rien à mettre à jour
+    if grep -q "no documents to get" <<< "$RUN_OUTPUT"; then
+      log_info "Aucun index $pattern n'était déjà géré par ISM : rien à mettre à jour (ce n'est pas une erreur)."
+    else
+      die "Mise à jour de la politique des index $pattern impossible (réponse ci-dessus)."
+    fi
+  fi
+}
+
 # ------------------------------------------------------------------ flux réseau (documentation pour l'équipe pare-feu)
 network_flows() {
   local mip admins gmode gips ehost eport sms

@@ -55,20 +55,14 @@ JSON
   fi
   run "Politique $id : ${desc} supprimées après ${days} jours" indexer_api PUT "/_plugins/_ism/policies/${id}${q}" "$body"
 }
-attach_policy() { # attach_policy id motif
-  local id="$1" pattern="$2"
-  # index sans politique -> add ; index déjà gérés -> change_policy (nouvelle version de la politique)
-  run "Rattachement des index existants $pattern à $id" indexer_api POST "/_plugins/_ism/add/${pattern}" "{\"policy_id\":\"${id}\"}"
-  run "Mise à jour des index $pattern déjà gérés" indexer_api POST "/_plugins/_ism/change_policy/${pattern}" "{\"policy_id\":\"${id}\"}"
-}
 run --hint "Vérifier l'étape 02 (mot de passe admin) et que wazuh-indexer est actif." "Connexion à l'indexer" indexer_api GET /_cluster/health
 put_policy wazuh-bundle-alerts "$RET_ALERTS_DAYS" '["wazuh-alerts-*"]' "alertes"
 put_policy wazuh-bundle-archives "$RET_ARCHIVES_DAYS" '["wazuh-archives-*"]' "archives"
 put_policy wazuh-bundle-monitoring "$RET_MONITORING_DAYS" '["wazuh-monitoring-*","wazuh-statistics-*"]' "statistiques"
-attach_policy wazuh-bundle-alerts "wazuh-alerts-*"
-attach_policy wazuh-bundle-archives "wazuh-archives-*"
-attach_policy wazuh-bundle-monitoring "wazuh-monitoring-*"
-attach_policy wazuh-bundle-monitoring "wazuh-statistics-*"
+ism_attach wazuh-bundle-alerts "wazuh-alerts-*"
+ism_attach wazuh-bundle-archives "wazuh-archives-*"
+ism_attach wazuh-bundle-monitoring "wazuh-monitoring-*"
+ism_attach wazuh-bundle-monitoring "wazuh-statistics-*"
 # Politique de la v2 du bundle : remplacée par les politiques ci-dessus
 if indexer_api GET /_plugins/_ism/policies/wazuh-retention >/dev/null 2>&1; then
   run --allow-fail "Suppression de l'ancienne politique v2 « wazuh-retention »" indexer_api DELETE /_plugins/_ism/policies/wazuh-retention || true
