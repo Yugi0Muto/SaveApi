@@ -102,6 +102,11 @@ Le poste de commande est généré par `grafana/build_dashboard.py` : modifiez c
 python3 grafana/build_dashboard.py
 ```
 
+## Installation manuelle (sans les scripts)
+
+[`docs/INSTALLATION_MANUELLE.md`](docs/INSTALLATION_MANUELLE.md) reproduit chaque étape commande par commande,
+avec une vérification à la fin de chaque partie.
+
 ## Les étapes
 
 | Étape | Rôle | Questions principales |
