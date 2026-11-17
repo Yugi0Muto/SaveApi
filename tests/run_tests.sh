@@ -220,6 +220,31 @@ import zipfile; z=zipfile.ZipFile('$TMP/sim/h.zip','w'); z.write('$TMP/sim/hashe
 sed -i "s#^MALWARE_HASH_URL=.*#MALWARE_HASH_URL=file://$TMP/sim/h.zip#" "$TMP/sim/answers.env"; rm -f "$TMP/sim/out/list"; run_upd
 t "export ZIP de MalwareBazaar accepté" bash -c '[[ "$(wc -l < '"$TMP"'/sim/out/list)" == 80 ]]'
 
+echo "== 8b. Source de hashes : clé {AUTH_KEY}, formats, erreurs HTTP"
+mkdir -p "$TMP/hs/www/v2/k3y-s3cret"
+python3 - "$TMP/hs/www/v2/k3y-s3cret/recent.csv" <<'PYEOF'
+import hashlib, sys
+with open(sys.argv[1], "w") as f:
+    f.write('# "first_seen_utc","sha256_hash","md5_hash","sha1_hash","tlsh"\n')
+    for i in range(60):
+        h = lambda a: hashlib.new(a, str(i).encode()).hexdigest()
+        f.write(f'"2026-11-17 01:00:00","{h("sha256")}","{h("md5")}","{h("sha1")}","T1{h("sha256")}AB12"\n')
+PYEOF
+( cd "$TMP/hs/www" && exec python3 -m http.server 18765 --bind 127.0.0.1 ) >/dev/null 2>&1 &
+HSPID=$!; sleep 1
+printf 'ABUSECH_AUTH_KEY=k3y-s3cret\n' > "$TMP/hs/secrets.env"
+HS() { # HS URL -> lance --test-hashes avec cette URL
+  printf 'MALWARE_HASH_ENABLE=oui\nMALWARE_HASH_URL=%q\n' "$1" > "$TMP/hs/answers.env"
+  ANSWERS_FILE="$TMP/hs/answers.env" SECRETS_FILE="$TMP/hs/secrets.env" bash tools/update_malware.sh --test-hashes 2>&1
+}
+export -f HS; export TMP
+t "{AUTH_KEY} remplacé, CSV accepté : 60 SHA256 (md5/sha1/tlsh ignorés)" bash -c 'o="$(HS "http://127.0.0.1:18765/v2/{AUTH_KEY}/recent.csv")"; grep -q "60 empreintes SHA256" <<< "$o" && grep -q "source valide" <<< "$o"'
+t "la clé n'apparaît jamais dans la sortie" bash -c 'o="$(HS "http://127.0.0.1:18765/v2/{AUTH_KEY}/recent.csv")"; ! grep -q "k3y-s3cret" <<< "$o"'
+t "HTTP 404 (ex. « ] » en trop) : cause expliquée, code 1" bash -c 'o="$(HS "http://127.0.0.1:18765/v2/{AUTH_KEY}/recent.csv]")"; rc=$?; grep -q "HTTP 404" <<< "$o" && grep -q "caractère en trop" <<< "$o" && ! HS "http://127.0.0.1:18765/nexiste" >/dev/null'
+t "{AUTH_KEY} sans clé enregistrée : erreur explicite" bash -c 'printf "MALWARE_HASH_ENABLE=oui\nMALWARE_HASH_URL=x{AUTH_KEY}\n" > $TMP/hs/a2.env; ANSWERS_FILE=$TMP/hs/a2.env SECRETS_FILE=/nexiste bash tools/update_malware.sh --test-hashes 2>&1 | grep -q "aucune clé abuse.ch"'
+t "v_url refuse le « ] » final d'un copier-coller" bash -c '! bash -c "source lib/common.sh; v_url \"https://bazaar.abuse.ch/export/txt/sha256/recent/]\"" >/dev/null'
+kill "$HSPID" 2>/dev/null
+
 echo "== 9. Purge des fichiers locaux et sauvegarde"
 mkdir -p "$TMP/ossec/alerts/2020/Jan" "$TMP/ossec/alerts/2026/Nov"
 touch -d '400 days ago' "$TMP/ossec/alerts/2020/Jan/ossec-alerts-01.json.gz"

@@ -255,6 +255,10 @@ v_host() { [[ "$1" =~ ^[A-Za-z0-9]([A-Za-z0-9.-]*[A-Za-z0-9])?$ ]] || { echo "«
 v_port() { v_int 1 65535 "$1"; }
 v_phone_list() { [[ -n "$1" ]] || { echo "au moins un numéro"; return 1; }; local p; for p in $1; do [[ "$p" =~ ^\+[0-9]{8,15}$ ]] || { echo "« $p » : format international attendu (+241XXXXXXXX)"; return 1; }; done; }
 v_abs_paths() { [[ -n "$1" ]] || { echo "au moins un répertoire"; return 1; }; local p; for p in $1; do [[ "$p" == /* && "$p" != *[\<\>\&,]* ]] || { echo "« $p » : chemin absolu attendu (sans < > & ,)"; return 1; }; done; }
+v_url() { # URL https:// (ou file:// pour un miroir local), sans espace ni caractère parasite (] [ < > " ')
+  [[ "$1" == https://* || "$1" == file://* ]] || { echo "l'URL doit commencer par https://"; return 1; }
+  case "$1" in *[][\<\>\"\'[:space:]]*) echo "« $1 » contient un caractère interdit (espace, crochet, guillemet, < >) : erreur de copier-coller ?"; return 1;; esac
+}
 v_version_branch() { [[ "$1" =~ ^4\.[0-9]{1,2}$ ]] || { echo "branche attendue au format 4.NN (ex : 4.14)"; return 1; }; }
 
 # ------------------------------------------------------------------ secrets (root 600, jamais affichés)

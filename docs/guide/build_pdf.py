@@ -532,7 +532,9 @@ step("06", "Détection de malwares (YARA + hashes)", "installer YARA 4.5.8 (code
       ["Répertoires planifiés", "/home", "Gros répertoires."],
       ["Taille maximale analysée (Mo)", "100", "—"],
       ["Sources de règles supplémentaires (URL)", "aucune", "Chaque fichier est compilé avant d'être accepté."],
-      ["Clé Auth-Key abuse.ch", "—", "Sans clé, le téléchargement peut être refusé."]],
+      ["Source des hashes", "API v2", "Testée immédiatement ; « autre URL » si abuse.ch change d'adresse "
+                                      "(clé remplacée par {AUTH_KEY})."],
+      ["Clé Auth-Key abuse.ch", "—", "Obligatoire et gratuite (auth.abuse.ch) ; jamais affichée."]],
      "test EICAR et test " + c("wazuh-logtest") + " réussis ; " + c("/var/log/wazuh-bundle/malware.log") + ".")
 step("07", "Alertes e-mail", "envoyer les alertes importantes par e-mail via un Postfix local (127.0.0.1) qui "
      "relaie vers le serveur choisi. Wazuh ne sait pas, seul, chiffrer ni s'authentifier.",
@@ -803,7 +805,8 @@ table(["Symptôme", "Cause probable", "Vérification / solution"], [
      c("journalctl -t postfix/smtp -n 30") + " ; 535 = identifiants refusés (Gmail : mot de passe d'application)."],
     ["Pas de SMS", "Clé, crédit, mode sandbox", c("journalctl -u wazuh-sms-alerter -n 30") + "."],
     ["Alerte 100512 (YARA)", "YARA ou règles absents sur l'agent", "docs/YARA.md, § Dépannage."],
-    ["Liste de hashes vide", "Clé abuse.ch absente, réseau", c("tail /var/log/wazuh-bundle/malware.log") + "."],
+    ["Liste de hashes vide", "Clé abuse.ch, URL (404), réseau", c("wazuh-bundle-update-malware --test-hashes") +
+     " affiche la cause ; " + c("tail /var/log/wazuh-bundle/malware.log") + "."],
     ["Bloqué par la réponse active", "IP non whitelistée", "Ajouter l'IP à la liste blanche (étape 03) ; "
      "déblocage automatique après la durée choisie."],
     ["Perte d'accès SSH au serveur", "Mesure de l'étape 01", "Console (hyperviseur / iDRAC) : supprimer " +

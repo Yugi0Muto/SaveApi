@@ -89,14 +89,48 @@ fi
 
 if [[ "$MALWARE_HASH_ENABLE" == oui ]]; then
   section "Liste de hashes : source"
-  ask MALWARE_HASH_URL "URL de la liste d'empreintes SHA256" "https://bazaar.abuse.ch/export/txt/sha256/recent/" v_nonempty
-  if ! secret_get ABUSECH_AUTH_KEY >/dev/null; then
-    if ask_yes_no ABUSECH_HAS_KEY "Avez-vous une clé Auth-Key abuse.ch (gratuite, https://auth.abuse.ch/) ?" non; then
-      ask_secret ABUSECH_AUTH_KEY "Clé Auth-Key abuse.ch"
-    else
-      log_warn "Sans clé, abuse.ch peut refuser le téléchargement : la mise à jour le signalera chaque nuit (journal /var/log/wazuh-bundle/malware.log)."
+  explain <<'TXT'
+abuse.ch publie les empreintes des malwares reçus par MalwareBazaar. L'export « recent » contient
+celles des dernières 48 heures ; il est régénéré toutes les 5 minutes (le bundle le télécharge une
+fois par nuit, ce qui respecte la limite demandée par abuse.ch).
+Une clé Auth-Key GRATUITE est exigée : créer un compte sur https://auth.abuse.ch/ puis copier la clé.
+La clé n'est jamais écrite dans les réponses ni dans les journaux : dans l'URL, elle est représentée
+par {AUTH_KEY} et remplacée au moment du téléchargement.
+Si abuse.ch change ses adresses, choisir « autre URL » et coller le lien de l'export SHA256 affiché
+sur https://bazaar.abuse.ch/export/ (une fois connecté), en remplaçant la clé par {AUTH_KEY}.
+TXT
+  while true; do
+    ask_choice MALWARE_HASH_SOURCE "Source de la liste d'empreintes" bazaar_v2 \
+      "bazaar_v2|MalwareBazaar — export « recent », API v2 (clé dans l'URL) — recommandé" \
+      "bazaar_txt|MalwareBazaar — ancien export texte (bazaar.abuse.ch/export/txt/sha256/recent/)" \
+      "autre|Autre URL (adresse publiée par abuse.ch, miroir interne)"
+    case "$MALWARE_HASH_SOURCE" in
+      bazaar_v2)  ans_set MALWARE_HASH_URL 'https://mb-api.abuse.ch/v2/files/exports/{AUTH_KEY}/recent.csv';;
+      bazaar_txt) ans_set MALWARE_HASH_URL 'https://bazaar.abuse.ch/export/txt/sha256/recent/';;
+      autre)      ask MALWARE_HASH_URL "URL de la liste (mettre {AUTH_KEY} à la place de la clé si elle figure dans l'URL)" "" v_url;;
+    esac
+    if ! secret_get ABUSECH_AUTH_KEY >/dev/null; then
+      ask_secret ABUSECH_AUTH_KEY "Clé Auth-Key abuse.ch (https://auth.abuse.ch/)"
     fi
-  fi
+    if run --allow-fail --hint "Lire la ligne « hashes : » ci-dessus : elle donne la cause (404 = mauvaise URL, 401/403 = clé refusée, réseau…)." \
+         "Test de la source de hashes (téléchargement, sans rien installer)" \
+         bash "$BUNDLE_ROOT/tools/update_malware.sh" --test-hashes; then
+      break
+    fi
+    if [[ "$NONINTERACTIVE" == 1 ]]; then
+      log_warn "Source de hashes injoignable : la mise à jour nocturne réessaiera (journal /var/log/wazuh-bundle/malware.log)."; break
+    fi
+    ask_choice MALWARE_HASH_ON_FAIL "La source ne fonctionne pas. Que faire ?" corriger \
+      "corriger|Choisir une autre source ou corriger l'URL" \
+      "cle|Ressaisir la clé Auth-Key" \
+      "continuer|Continuer : la mise à jour réessaiera chaque nuit" \
+      "desactiver|Désactiver la liste de hashes"
+    case "$MALWARE_HASH_ON_FAIL" in
+      cle) sed -i '/^ABUSECH_AUTH_KEY=/d' "$SECRETS_FILE";;   # la clé sera redemandée
+      continuer) log_warn "Liste de hashes conservée sans mise à jour pour l'instant."; break;;
+      desactiver) ans_set MALWARE_HASH_ENABLE non; MALWARE_HASH_ENABLE=non; log_info "Liste de hashes désactivée."; break;;
+    esac
+  done
 fi
 
 # ---------------------------------------------------------------- 4. Configuration Wazuh

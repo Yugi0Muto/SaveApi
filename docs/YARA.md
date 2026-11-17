@@ -62,6 +62,7 @@ Avec la méthode `source`, le script `tools/install_yara.sh` :
 |---|---|
 | Activer YARA ? | Oui, au moins pour les serveurs web et la DMZ. |
 | Liste de hashes ? | Oui. Elle complète YARA en détectant les malwares connus à l'identique. Une clé gratuite est nécessaire : https://auth.abuse.ch/ |
+| Source des hashes | « MalwareBazaar API v2 » (recommandé). Si abuse.ch change ses adresses, choisissez « autre URL » et collez le lien de l'export SHA256 affiché sur https://bazaar.abuse.ch/export/ une fois connecté, en remplaçant la clé par `{AUTH_KEY}`. La source est **testée immédiatement**. En cas d'échec, la cause est affichée : 404 pour une URL erronée (par exemple un « ] » en trop au copier-coller), 401/403 pour une clé refusée, ou un problème réseau. Vous choisissez alors de corriger, de continuer ou de désactiver la liste. |
 | Répertoires en temps réel | Petits répertoires très exposés : `/var/www /tmp /var/tmp /dev/shm`. |
 | Répertoires planifiés | Gros répertoires : `/home`. Ils sont analysés lors du contrôle périodique du segment. |
 | Taille maximale | 100 Mo. Les fichiers plus gros sont ignorés : les webshells et scripts sont petits. |
@@ -95,4 +96,4 @@ apparaît. Supprimez ensuite le fichier.
 | Alerte 100512 « règles YARA introuvables » | Agent absent du groupe `feat-yara` | Sur le manager : `/var/ossec/bin/agent_groups -s -i <ID>` |
 | Pas d'alerte 100501 | Répertoire non surveillé | `/var/ossec/etc/shared/agent.conf` sur l'agent |
 | Alerte 100501 sans résultat | Réponse active non exécutée | `tail /var/ossec/logs/active-responses.log` sur l'agent |
-| Mise à jour des hashes en échec | Clé abuse.ch absente ou réseau | `/var/log/wazuh-bundle/malware.log` sur le manager |
+| Mise à jour des hashes en échec | Clé abuse.ch, URL ou réseau | `/var/log/wazuh-bundle/malware.log`. Le test manuel `wazuh-bundle-update-malware --test-hashes` affiche la cause sans rien installer. |
