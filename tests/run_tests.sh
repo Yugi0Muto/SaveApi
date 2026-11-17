@@ -191,6 +191,20 @@ t "surcharge systemd du bundle (délai de démarrage) conservée, surcharge étr
   grep -q "^keep|file|.*wazuh-bundle-timeout.conf|" <<< "$o" && grep -q "^wazuh|unit|.*old.conf|" <<< "$o"'
 t "filtre : délai de démarrage dépassé expliqué (ressources)" bash -c 'printf "17/11/2026 12:09:20 ERROR: wazuh-manager.service: Failed with result '"'"'timeout'"'"'\n" | BUNDLE_COLOR=0 python3 tools/wazuh_install_filter.py | grep -q "Démarrage trop lent"'
 
+echo "== 4f. Indexer ouvert sur l'IP (Grafana distant) : réémission du certificat"
+if command -v openssl >/dev/null; then
+  P="$TMP/pki"; mkdir -p "$P"
+  openssl req -x509 -new -nodes -newkey rsa:2048 -keyout "$P/root-ca.key" -out "$P/root-ca.pem" -days 5 -subj "/O=Wazuh/CN=root-ca" 2>/dev/null
+  openssl req -new -nodes -newkey rsa:2048 -keyout "$P/indexer-key.pem" -out "$P/n.csr" -subj "/C=US/L=California/O=Wazuh/OU=Wazuh/CN=node-1" 2>/dev/null
+  printf "[v]\nsubjectAltName=IP:127.0.0.1\n" > "$P/e.cnf"
+  openssl x509 -req -in "$P/n.csr" -CA "$P/root-ca.pem" -CAkey "$P/root-ca.key" -CAcreateserial -out "$P/indexer.pem" -days 5 -extfile "$P/e.cnf" -extensions v 2>/dev/null
+  t "certificat réémis, signé par la même autorité" bash -c 'source lib/indexer_expose.sh; reissue_indexer_cert '"$P"'/indexer.pem '"$P"'/indexer-key.pem '"$P"'/root-ca.pem '"$P"'/root-ca.key 192.168.1.50 '"$P"'/new.pem && openssl verify -CAfile '"$P"'/root-ca.pem '"$P"'/new.pem'
+  t "valide pour l'IP du serveur ET pour 127.0.0.1" bash -c 'openssl verify -CAfile '"$P"'/root-ca.pem -verify_ip 192.168.1.50 '"$P"'/new.pem && openssl verify -CAfile '"$P"'/root-ca.pem -verify_ip 127.0.0.1 '"$P"'/new.pem'
+  t "même identité (sujet) et même clé : le module de sécurité reconnaît le nœud" bash -c '[[ "$(openssl x509 -in '"$P"'/new.pem -noout -subject)" == "$(openssl x509 -in '"$P"'/indexer.pem -noout -subject)" && "$(openssl x509 -in '"$P"'/new.pem -noout -pubkey)" == "$(openssl pkey -in '"$P"'/indexer-key.pem -pubout)" ]]'
+  t "autorité incorrecte : refus explicite" bash -c 'openssl req -x509 -new -nodes -newkey rsa:2048 -keyout '"$P"'/o.key -out '"$P"'/o.pem -days 5 -subj "/CN=autre" 2>/dev/null; source lib/indexer_expose.sh; ! reissue_indexer_cert '"$P"'/indexer.pem '"$P"'/indexer-key.pem '"$P"'/root-ca.pem '"$P"'/o.key 192.168.1.50 '"$P"'/bad.pem 2>/dev/null'
+else echo "  [SKIP] openssl absent"; fi
+t "étape 02 : plus de procédure « en plusieurs commandes »" bash -c '! grep -qE "^[^#]*(--wazuh-server|--start-cluster|--generate-config-files)" steps/02_wazuh_install.sh'
+
 echo "== 5. E-mail : paramètres Postfix des 3 modes"
 E() { bash -c 'source lib/email.sh; postfix_settings '"$*"; }
 t "gmail : 587, TLS vérifié, authentification" bash -c 'o="$(bash -c "source lib/email.sh; postfix_settings gmail smtp.gmail.com 587 verify oui")"; grep -qx "relayhost = \[smtp.gmail.com\]:587" <<< "$o" && grep -qx "smtp_tls_security_level = secure" <<< "$o" && grep -qx "smtp_sasl_auth_enable = yes" <<< "$o" && grep -qx "inet_interfaces = loopback-only" <<< "$o"'

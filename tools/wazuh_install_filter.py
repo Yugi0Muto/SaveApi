@@ -49,6 +49,10 @@ ERRORS = [
     (r"start operation timed out|result 'timeout'|Timeout",
      "Démarrage trop lent : systemd a abandonné le service. Cause habituelle : RAM ou CPU insuffisants "
      "(8 Go et 4 CPU recommandés)."),
+    (r"API user .* does not exist|is not registered in Wazuh API",
+     "L'API Wazuh n'était pas encore prête quand l'installateur a voulu changer ses mots de passe "
+     "(installation « en plusieurs commandes »). Le bundle utilise désormais l'installation tout-en-un : "
+     "mettre à jour le bundle (git pull) et relancer l'étape 02."),
     (r"wazuh-manager could not be started",
      "Le manager n'a pas démarré. Si la ligne « wazuh-keystore … Aucun fichier » apparaît juste avant, c'est "
      "un reste d'installation précédente ; sinon : journalctl -u wazuh-manager -n 50."),

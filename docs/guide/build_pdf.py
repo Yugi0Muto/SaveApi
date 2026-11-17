@@ -513,8 +513,9 @@ step("01", "Durcissement SSH (optionnel)", "réduire le risque sur l'accès d'ad
      "relancer l'étape et choisir « supprimer ».")
 step("02", "Installation de Wazuh", "installer manager, indexer et dashboard avec l'assistant officiel " + c("wazuh-install.sh") + " (branche 4.14), puis ranger les mots de passe générés.",
      [["Branche de Wazuh", "4.14", "Rester sur la branche validée."],
-      ["Adresse d'écoute de l'indexer", "local (127.0.0.1)", "« réseau » uniquement pour un Grafana installé sur "
-                                                           "une autre machine."]],
+      ["Grafana sera-t-il sur une autre machine ?", "non", "Oui : après l'installation tout-en-un, l'indexer est "
+       "ouvert sur l'IP du serveur (certificat réémis par la même autorité, test HTTPS, retour arrière "
+       "automatique en cas d'échec)."]],
      "services " + c("wazuh-manager") + ", " + c("wazuh-indexer") + ", " + c("wazuh-dashboard") + " actifs ; "
      "connexion à l'indexer réussie ; dashboard accessible en " + c("https://IP-du-serveur") + " (utilisateur " + c("admin") + ", mot de passe dans " + c("/root/.wazuh-bundle/wazuh-passwords.txt") + "). Copier ce fichier "
      "dans le coffre-fort de l'entreprise.")
@@ -580,7 +581,7 @@ step("09", "Grafana (optionnel)", "écran de supervision « Wazuh — Vue SOC »
      "utilisateur en <b>lecture seule</b> (" + c("grafana_ro") + ").",
      [["Mettre en place Grafana ?", "non", "Le Wazuh Dashboard suffit pour l'analyse."],
       ["Emplacement", "local", "« remote » : génère un kit à installer sur la machine Grafana existante "
-                               "(exige l'indexer en mode « réseau » à l'étape 02)."]],
+                               "(l'étape propose d'ouvrir l'indexer sur l'IP si ce n'est pas déjà fait)."]],
      "local : " + c("http://IP:3000") + " ; distant : le kit termine par « Indexer joignable ».")
 step("10", "Sauvegarde de la configuration", "archiver chaque nuit la configuration (Wazuh, certificats, réponses "
      "et secrets du bundle, Postfix, SSH, Grafana) pour pouvoir reconstruire le serveur.",

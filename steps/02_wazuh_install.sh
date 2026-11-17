@@ -12,6 +12,7 @@ step_header 02 "Installation de Wazuh"
 need_answer MANAGER_IP 00
 
 source "$BUNDLE_ROOT/lib/cleanup.sh"
+source "$BUNDLE_ROOT/lib/indexer_expose.sh"
 WAZUH_PKGS=(wazuh-manager wazuh-indexer wazuh-dashboard filebeat)
 wazuh_complete() { local p; for p in "${WAZUH_PKGS[@]}"; do pkg_installed "$p" || return 1; done; }
 blocking_traces() { trace_scan | grep -E '^(wazuh|conflict|system)\|' | cut -d'|' -f2- | sed 's/|/ : /; s/|/ — /' || true; }
@@ -42,6 +43,8 @@ install_failure_report() {
   local since="$1" before="$2" diag f
   diag="$(mktemp -d)"
   section "Diagnostic de l'échec"
+  # l'installateur peut recréer son journal à chaque tentative : alors on le prend en entier
+  (( $(wc -l < /var/log/wazuh-install.log 2>/dev/null || echo 0) < before )) && before=0
   # mots de passe masqués (l'installateur peut les écrire dans son journal)
   tail -n +"$((before+1))" /var/log/wazuh-install.log 2>/dev/null \
     | sed -E -e "s/([Pp]ass(word)?[^:=]*[:=][[:space:]]*'?)[^' ]+/\1***masqué***/g" \
@@ -116,9 +119,17 @@ Durée : 10 à 20 minutes. Le script officiel de Wazuh est téléchargé puis af
 avant d'être exécuté.
 TXT
 ask WAZUH_BRANCH "Branche de Wazuh à installer" "4.14" v_version_branch
-ask_choice INDEXER_HOST_MODE "Adresse d'écoute de l'indexer (port 9200)" local \
-  "local|127.0.0.1 — recommandé : la base n'est pas exposée sur le réseau" \
-  "reseau|${MANAGER_IP} — requis uniquement pour un Grafana installé sur une autre machine"
+explain <<TXT
+Où sera Grafana (tableau de bord de supervision, étape 09) ?
+  - pas de Grafana, ou Grafana sur CE serveur : la base des alertes (indexer, port 9200) reste
+    accessible uniquement depuis ce serveur (127.0.0.1). Recommandé : rien n'est exposé ;
+  - Grafana sur une AUTRE machine : l'indexer doit aussi écouter sur ${MANAGER_IP}. Le bundle fait
+    l'installation tout-en-un puis ouvre l'indexer sur cette adresse (nouveau certificat), et le
+    pare-feu de l'entreprise ne doit autoriser le port 9200 QUE depuis la machine Grafana.
+TXT
+ask_choice INDEXER_HOST_MODE "Grafana sera-t-il installé sur une autre machine ?" local \
+  "local|Non (pas de Grafana, ou Grafana sur ce serveur) — indexer sur 127.0.0.1, recommandé" \
+  "reseau|Oui — ouvrir aussi l'indexer sur ${MANAGER_IP}:9200"
 if [[ "$INDEXER_HOST_MODE" == local ]]; then INDEXER_HOST=127.0.0.1; else INDEXER_HOST="$MANAGER_IP"; fi
 ans_set INDEXER_HOST "$INDEXER_HOST"
 
@@ -156,33 +167,9 @@ if (( ram_mb < 7500 || cpus < 4 )); then
 fi
 confirm "Lancer l'installation de Wazuh maintenant ?" || die "Installation annulée par l'utilisateur (le script reste dans $WORK)."
 
-if [[ "$INDEXER_HOST" == 127.0.0.1 ]]; then
-  wazuh_install "Installation tout-en-un (indexer sur 127.0.0.1)" -a
-else
-  explain <<TXT
-Mode « indexer sur ${MANAGER_IP} » : on suit la procédure officielle pas à pas avec un fichier
-config.yml qui déclare l'adresse ${MANAGER_IP} pour l'indexer, le manager et le dashboard
-(les certificats sont générés pour cette adresse).
-TXT
-  cat > config.yml <<YML
-nodes:
-  indexer:
-    - name: node-1
-      ip: "${MANAGER_IP}"
-  server:
-    - name: wazuh-1
-      ip: "${MANAGER_IP}"
-  dashboard:
-    - name: dashboard
-      ip: "${MANAGER_IP}"
-YML
-  run "Fichier config.yml utilisé" cat config.yml
-  wazuh_install "Génération des certificats et des mots de passe" --generate-config-files
-  wazuh_install "Installation de l'indexer" --wazuh-indexer node-1
-  wazuh_install "Initialisation du cluster de l'indexer" --start-cluster
-  wazuh_install "Installation du manager (serveur Wazuh)" --wazuh-server wazuh-1
-  wazuh_install "Installation du dashboard" --wazuh-dashboard dashboard
-fi
+# Toujours l'installation tout-en-un officielle (la plus éprouvée). La procédure « en plusieurs commandes »
+# échoue de façon intermittente (« The Wazuh API user wazuh does not exist ») : elle n'est plus utilisée.
+wazuh_install "Installation tout-en-un de Wazuh" -a
 
 [[ -f wazuh-install-files.tar ]] || die "wazuh-install-files.tar absent : l'installation n'a pas produit ses fichiers (voir /var/log/wazuh-install.log)."
 mkdir -p "$SECRETS_DIR"; chmod 700 "$SECRETS_DIR"
@@ -195,6 +182,10 @@ cd /; run "Nettoyage du dossier de travail" rm -rf "$WORK"
 
 ver="$(dpkg-query -W -f='${Version}' wazuh-manager)"; ans_set WAZUH_VERSION "$ver"
 for s in wazuh-manager wazuh-indexer wazuh-dashboard; do run "État du service $s" systemctl is-active "$s"; done
+if [[ "$INDEXER_HOST" != 127.0.0.1 ]]; then
+  section "Ouverture de l'indexer sur $INDEXER_HOST (Grafana distant)"
+  expose_indexer "$INDEXER_HOST"
+fi
 run --hint "Le certificat de l'indexer doit contenir l'adresse $INDEXER_HOST." "Test de connexion à l'indexer ($(indexer_url))" indexer_api GET /
 
 log_ok "Wazuh $ver installé."
