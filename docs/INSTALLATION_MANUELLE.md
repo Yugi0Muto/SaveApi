@@ -162,6 +162,19 @@ En cas d'échec, la cause est presque toujours dans :
 `journalctl -u wazuh-manager -n 50 --no-pager` et `grep -nE "ERROR|could not" /var/log/wazuh-install.log | tail`.
 Avant de relancer, refaire la partie 1.
 
+**Repartir de zéro après un échec** : `bash install.sh --step 90` (niveau « wazuh ») désinstalle
+Wazuh et archive d'abord la configuration dans /root. À la main :
+
+```bash
+systemctl disable --now wazuh-dashboard filebeat wazuh-manager wazuh-indexer
+apt-get purge -y wazuh-manager wazuh-indexer wazuh-dashboard filebeat \
+  || dpkg --purge --force-remove-reinstreq --force-depends wazuh-manager wazuh-indexer wazuh-dashboard filebeat
+rm -rf /var/ossec /etc/wazuh-indexer /usr/share/wazuh-indexer /var/lib/wazuh-indexer \
+       /etc/wazuh-dashboard /usr/share/wazuh-dashboard /var/lib/wazuh-dashboard \
+       /etc/filebeat /usr/share/filebeat /var/lib/filebeat
+systemctl daemon-reload
+```
+
 **Erreur « Your system does not meet the recommended minimum hardware requirements »** : moins de
 2 cœurs ou de 3 700 Mo de RAM. Sans changer le matériel : créer un fichier d'échange puis relancer avec
 `-i` (ignore le contrôle ; l'indexer risque d'être lent) :

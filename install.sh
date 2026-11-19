@@ -4,6 +4,7 @@
 #   bash install.sh                  menu interactif
 #   bash install.sh --all            toutes les étapes dans l'ordre (s'arrête à la première erreur)
 #   bash install.sh --step 03        une seule étape
+#   bash install.sh --step 90        nettoyage pour une nouvelle installation (désinstalle Wazuh)
 #   bash install.sh --explain 06     explique ce que fait une étape, sans rien exécuter
 #   bash install.sh --flows          affiche les flux réseau à faire ouvrir sur le pare-feu de l'entreprise
 #   bash install.sh --non-interactive --step 07
@@ -28,8 +29,11 @@ declare -A LABEL=(
  [08]="Alertes SMS (Africa's Talking)"
  [09]="Grafana (local ou distant)"
  [10]="Sauvegarde quotidienne de la configuration"
+ [90]="Nettoyage pour une nouvelle installation (désinstalle Wazuh ; à la demande)"
  [99]="Recette automatique (vérification complète)" )
 ORDER=(00 01 02 03 04 05 06 07 08 09 10 99)
+# Étapes hors « Tout exécuter » : seulement à la demande (menu ou --step)
+EXTRA_STEPS=(90)
 
 step_file() { local f; f="$(ls "$STEPS_DIR/${1}_"*.sh 2>/dev/null | head -1)"; [[ -n "$f" ]] || die "Étape $1 inconnue."; echo "$f"; }
 
@@ -63,7 +67,7 @@ while [[ $# -gt 0 ]]; do
     --explain) ACTION=explain; ARG="${2:?numéro d étape attendu}"; shift 2;;
     --flows) ACTION=flows; shift;;
     --non-interactive) NONINTERACTIVE=1; shift;;
-    -h|--help) sed -n '2,13p' "$0"; exit 0;;
+    -h|--help) sed -n '2,14p' "$0"; exit 0;;
     *) die "Argument inconnu : $1 (voir --help)";;
   esac
 done
@@ -82,6 +86,8 @@ while true; do
   echo "║        WAZUH BUNDLE v$BUNDLE_VERSION — installation du serveur            ║"
   echo "╚══════════════════════════════════════════════════════════════╝"
   for n in "${ORDER[@]}"; do printf "  %s) %s\n" "$n" "${LABEL[$n]}"; done
+  echo "  ── à la demande ──"
+  for n in "${EXTRA_STEPS[@]}"; do printf "  %s) %s\n" "$n" "${LABEL[$n]}"; done
   echo "  a) Tout exécuter dans l'ordre   e) Expliquer une étape   f) Flux réseau à ouvrir   q) Quitter"
   read -rp "Choix : " c || exit 0
   case "$c" in

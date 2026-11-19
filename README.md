@@ -37,6 +37,7 @@ réseau. Autres modes :
 
 ```bash
 bash install.sh --step 07                    # une seule étape
+bash install.sh --step 90                    # nettoyage : désinstalle Wazuh pour une installation neuve
 bash install.sh --explain 06                 # ce que fait l'étape, sans rien exécuter
 bash install.sh --flows                      # flux réseau à transmettre à l'équipe pare-feu
 bash install.sh --non-interactive --step 05  # rejouer avec les réponses déjà données
@@ -122,6 +123,7 @@ avec une vérification à la fin de chaque partie.
 | 08 SMS | Africa's Talking, dédoublonnage + plafond | numéros, niveau |
 | 09 Grafana | Local ou distant, utilisateur lecture seule | emplacement |
 | 10 Sauvegarde | Archive quotidienne de la configuration | dossier, durée |
+| 90 Nettoyage | **À la demande** (hors « Tout exécuter ») : désinstalle Wazuh et les ajouts du bundle pour repartir sur une installation neuve ; archive de sécurité dans /root avant toute suppression | niveau (wazuh / complet), confirmation « NETTOYER » |
 | 99 Recette | Vérification complète, lecture seule | |
 
 Les agents s'installent avec `agents/install_agent_linux.sh` (questions interactives) et

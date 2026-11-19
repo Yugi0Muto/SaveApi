@@ -281,7 +281,7 @@ t "test_sms.py" python3 tests/test_sms.py
 
 echo "== 12. install.sh"
 if [[ "${EUID:-$(id -u)}" -eq 0 ]]; then
-  for n in 00 01 02 03 04 05 06 07 08 09 10 99; do t "install.sh --explain $n" bash -c 'bash install.sh --explain '"$n"' | grep -q "Étape '"$n"'"'; done
+  for n in 00 01 02 03 04 05 06 07 08 09 10 90 99; do t "install.sh --explain $n" bash -c 'bash install.sh --explain '"$n"' | grep -q "Étape '"$n"'"'; done
 else echo "  [SKIP] install.sh --explain (root requis)"; fi
 
 echo; echo "Résultat : $PASS OK, $FAIL échec(s)"; (( FAIL == 0 ))
