@@ -82,8 +82,21 @@ fi
 
 # ---------------------------------------------------------------- kit pour Grafana distant
 section "Kit pour la machine Grafana distante"
-run --hint "network.host de /etc/wazuh-indexer/opensearch.yml" "L'indexer écoute sur ${MANAGER_IP}:9200" \
-  output_has "(^|[^0-9.])(${MANAGER_IP//./\\.}|0\\.0\\.0\\.0|\\*|\\[::\\]):9200[[:space:]]" ss -tlnH
+# Adresses acceptées : l'IP du serveur, celle du nom choisi à l'étape 02, ou « toutes les adresses ».
+# Java (OpenSearch) affiche souvent ses sockets en IPv6 : [::ffff:192.168.1.110]:9200, [::]:9200, *:9200.
+idx_host="$(ans_get INDEXER_HOST)"; idx_ip="$(getent ahostsv4 "${idx_host:-$MANAGER_IP}" 2>/dev/null | awk 'NR==1{print $1}' || true)"
+listen_ok() {
+  local out addr ok=1
+  out="$(ss -tlnH '( sport = :9200 )' 2>/dev/null || true)"
+  echo "Sockets en écoute sur le port 9200 :"; echo "${out:-  (aucun)}"
+  while read -r addr; do
+    addr="${addr%:9200}"; addr="${addr#[}"; addr="${addr%]}"; addr="${addr#::ffff:}"
+    case "$addr" in "$MANAGER_IP"|"${idx_ip:-$MANAGER_IP}"|0.0.0.0|"*"|::) ok=0;; esac
+  done < <(awk '{print $4}' <<< "$out")
+  return "$ok"
+}
+run --hint "L'indexer n'écoute que sur 127.0.0.1 ? Voir network.host dans /etc/wazuh-indexer/opensearch.yml (étape 02, choix « réseau »)." \
+  "L'indexer écoute sur une adresse joignable par la machine Grafana (${MANAGER_IP}:9200)" listen_ok
 KIT_NAME="wazuh-grafana-kit"; KIT_FILE="$SECRETS_DIR/$KIT_NAME.tar.gz"
 WORK="$(mktemp -d)"; trap 'rm -rf "$WORK"' EXIT
 KIT="$WORK/$KIT_NAME"; mkdir -p "$KIT/dashboards"
